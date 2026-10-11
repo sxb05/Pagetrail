@@ -80,7 +80,48 @@ authorization checks.
 
 ## Run the application
 
-Start the local Redis service if it is needed:
+### Docker deployment
+
+Docker deployment runs the complete application:
+
+- `app`: FastAPI backend with the built React frontend
+- `redis`: Redis supporting service
+- Supabase PostgreSQL: external database configured through `DATABASE_URL`
+
+Make sure `.env` exists in the repository root before starting Compose. It is
+passed to the application container and is not copied into the image.
+
+Build and start the application:
+
+```powershell
+docker compose up --build -d
+```
+
+View application logs:
+
+```powershell
+docker compose logs -f app
+```
+
+Check the application:
+
+```text
+http://localhost:8000
+```
+
+Stop the deployment:
+
+```powershell
+docker compose down
+```
+
+The database remains in Supabase when the containers are stopped or removed.
+Do not add a local PostgreSQL container unless you intentionally want a
+separate database from Supabase.
+
+### Local development
+
+Start the local Redis service separately if it is needed:
 
 ```powershell
 docker compose up -d redis
