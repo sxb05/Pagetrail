@@ -20,11 +20,11 @@ from db import (
     list_conversations,
     save_chat_message,
 )
-from rag import add_document_to_vector_store
+from rag import add_document_to_vector_store, retrieve_documents
 from tools import set_current_thid
 
 
-app = FastAPI(title="HelloGPT")
+app = FastAPI(title="PageTrail")
 app.include_router(auth_router)
 app.add_middleware(
     CORSMiddleware,
@@ -117,9 +117,22 @@ def chat(request: ChatRequest, current_user: CurrentUser) -> dict[str, str]:
     save_chat_message(request.thread_id, current_user.id, "user", request.message)
 
     try:
+        document_context = retrieve_documents(request.message, request.thread_id, k=5)
+        prompt = request.message
+        if isinstance(document_context, list):
+            context_text = "\n\n".join(
+                f"[{item['metadata']['source']}]\n{item['content']}"
+                for item in document_context
+            )
+            prompt = (
+                "Use the following excerpts from the user's uploaded documents when "
+                "answering the request. If the excerpts do not contain the answer, "
+                "say so instead of inventing details.\n\n"
+                f"{context_text}\n\nUser request: {request.message}"
+            )
         agent = get_agent(request.model)
         result = agent.invoke(
-            {"messages": [{"role": "user", "content": request.message}]},
+            {"messages": [{"role": "user", "content": prompt}]},
             config={"configurable": {"thread_id": request.thread_id}},
         )
         assistant_message = result["messages"][-1]

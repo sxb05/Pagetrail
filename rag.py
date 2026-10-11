@@ -1,12 +1,15 @@
+import json
+import math
 from pathlib import Path
 from dotenv import load_dotenv
 from typing import List
-import os
+from uuid import uuid4
 
-from langchain_chroma import Chroma
+from db import engine
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from sqlalchemy import Column, MetaData, String, Table, Text, insert, select
 
 from pypdf import PdfReader
 import docx2txt
@@ -15,15 +18,20 @@ import docx2txt
 load_dotenv()
 
 Path("uploads").mkdir(exist_ok=True)
-Path("chroma_db").mkdir(exist_ok=True)
 
 embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
 
-vector_store = Chroma(
-    collection_name = "chatbot_docs",
-    embedding_function = embeddings,
-    persist_directory = "chroma_db"
+metadata = MetaData()
+rag_documents = Table(
+    "rag_documents",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column("thread_id", String(255), nullable=False, index=True),
+    Column("content", Text, nullable=False),
+    Column("source", String(255), nullable=False),
+    Column("embedding", Text, nullable=False),
 )
+metadata.create_all(bind=engine)
 
 
 def read_pdf(file_path: str) -> str:
@@ -62,17 +70,55 @@ def add_document_to_vector_store(file_path: str, thread_id: str):
         for chunk in chunks
     ]
     
-    vector_store.add_documents(documents)
+    vectors = embeddings.embed_documents([document.page_content for document in documents])
+    rows = [
+        {
+            "id": str(uuid4()),
+            "thread_id": thread_id,
+            "content": document.page_content,
+            "source": document.metadata["source"],
+            "embedding": json.dumps(vector),
+        }
+        for document, vector in zip(documents, vectors)
+    ]
+    with engine.begin() as connection:
+        connection.execute(insert(rag_documents), rows)
 
     return{ "filename" : Path(file_path).name, "num_chunks": len(chunks)}
+
+
+def _cosine_similarity(first: List[float], second: List[float]) -> float:
+    numerator = sum(left * right for left, right in zip(first, second))
+    first_norm = math.sqrt(sum(value * value for value in first))
+    second_norm = math.sqrt(sum(value * value for value in second))
+    if not first_norm or not second_norm:
+        return 0.0
+    return numerator / (first_norm * second_norm)
+
+
 def retrieve_documents(query: str, thread_id: str, k: int = 5):
     """
     Retrieve documents from the vector store based on a query and thread_id.
     """
-    results = vector_store.similarity_search(query, k=k, filter={"thread_id": thread_id})
-    if not results:
+    query_vector = embeddings.embed_query(query)
+    with engine.connect() as connection:
+        rows = connection.execute(
+            select(rag_documents.c.content, rag_documents.c.source, rag_documents.c.embedding)
+            .where(rag_documents.c.thread_id == thread_id)
+        ).mappings().all()
+
+    ranked_rows = sorted(
+        rows,
+        key=lambda row: _cosine_similarity(query_vector, json.loads(row["embedding"])),
+        reverse=True,
+    )[:k]
+    if not ranked_rows:
         return "No relevant documents found."
-    results=[]
-    for i , doc in enumerate(results, start=1):
-        results.append({"chunk_index": i, "content": doc.page_content, "metadata": doc.metadata})
-    return results
+    return [
+        {
+            "chunk_index": index,
+            "content": row["content"],
+            "metadata": {"thread_id": thread_id, "source": row["source"]},
+        }
+        for index, row in enumerate(ranked_rows, start=1)
+    ]

@@ -21,23 +21,13 @@ type Conversation = { thread_id: string; name: string; updated_at?: string };
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
 const starterPrompts = [
-  { title: "Plan a project", text: "Help me plan a project from idea to launch" },
-  { title: "Explain a concept", text: "Explain a complex concept in simple terms" },
-  { title: "Write something", text: "Help me write a polished professional email" },
+  { title: "Ask my documents", text: "What are the key points in the documents I uploaded?" },
+  { title: "Find an answer", text: "Search my files and explain the answer with the source." },
+  { title: "Search the web", text: "Look up the latest information about a topic." },
 ];
 
-function OpenAiLogoIcon({ size = 20 }: { size?: number }) {
-  return (
-    <svg
-      aria-hidden="true"
-      width={size}
-      height={size}
-      fill="currentColor"
-      viewBox="0 0 256 256"
-    >
-      <path d="M224.32,114.24a56,56,0,0,0-60.07-76.57A56,56,0,0,0,67.93,51.44a56,56,0,0,0-36.25,90.32A56,56,0,0,0,69,217,56.39,56.39,0,0,0,83.59,219a55.75,55.75,0,0,0,8.17-.61,56,56,0,0,0,96.31-13.78,56,56,0,0,0,36.25-90.32ZM182.85,54.43a40,40,0,0,1,28.56,48c-.95-.63-1.91-1.24-2.91-1.81L164,74.88a8,8,0,0,0-8,0l-44,25.41V81.81l40.5-23.38A39.76,39.76,0,0,1,182.85,54.43ZM144,137.24l-16,9.24-16-9.24V118.76l16-9.24,16,9.24ZM80,72a40,40,0,0,1,67.53-29c-1,.51-2,1-3,1.62L100,70.27a8,8,0,0,0-4,6.92V128l-16-9.24ZM40.86,86.93A39.75,39.75,0,0,1,64.12,68.57C64.05,69.71,64,70.85,64,72v51.38a8,8,0,0,0,4,6.93l44,25.4L96,165,55.5,141.57A40,40,0,0,1,40.86,86.93ZM73.15,201.57a40,40,0,0,1-28.56-48c.95.63,1.91,1.24,2.91,1.81L92,181.12a8,8,0,0,0,8,0l44-25.41v18.48l-40.5,23.38A39.76,39.76,0,0,1,73.15,201.57ZM176,184a40,40,0,0,1-67.52,29.05c1-.51,2-1.05,3-1.63L156,185.73a8,8,0,0,0,4-6.92V128l16,9.24Zm39.14-14.93a39.75,39.75,0,0,1-23.26,18.36c.07-1.14.12-2.28.12-3.43V132.62a8,8,0,0,0-4-6.93l-44-25.4,16-9.24,40.5,23.38A40,40,0,0,1,215.14,169.07Z" />
-    </svg>
-  );
+function BrandLogo({ size = 20 }: { size?: number }) {
+  return <img className="brand-logo-image" src="/pagetrail-icon.png" width={size} height={size} alt="" aria-hidden="true" />;
 }
 
 const backgroundOrbs = [
@@ -68,7 +58,7 @@ function AuthMotionBackground() {
       <motion.div
         className="auth-scanline"
         animate={prefersReducedMotion ? undefined : { y: ["-15vh", "115vh"] }}
-        transition={prefersReducedMotion ? undefined : { duration: 12, repeat: Infinity, ease: "linear", repeatDelay: 4 }}
+        transition={prefersReducedMotion ? undefined : { duration: 2, repeat: Infinity, ease: "linear", repeatDelay: 2 }}
       />
     </div>
   );
@@ -88,12 +78,12 @@ function AuthPage({ error, isRegisterMode, onModeChange, onSubmit }: AuthPagePro
       <div className="login-noise" aria-hidden="true" />
       <section className="login-card" aria-labelledby="login-title">
         <div className="login-brand">
-          <span className="brand-mark"><OpenAiLogoIcon size={18} /></span>
-          <span>HelloGPT</span>
+          <span className="brand-mark"><BrandLogo size={18} /></span>
+          <span>Pagetrail</span>
           <span className="login-live"><span /> Secure workspace</span>
         </div>
         <div className="login-heading">
-          <div className="login-orb" aria-hidden="true"><OpenAiLogoIcon size={30} /></div>
+          <div className="login-orb" aria-hidden="true"><BrandLogo size={30} /></div>
           <p className="login-eyebrow">{isRegisterMode ? "Start creating" : "Welcome back"}</p>
           <h1 id="login-title">{isRegisterMode ? "Create your account" : "Your ideas, in one place."}</h1>
           <p>{isRegisterMode
@@ -115,17 +105,17 @@ function AuthPage({ error, isRegisterMode, onModeChange, onSubmit }: AuthPagePro
           </label>
           {error && <p className="auth-error" role="alert">{error}</p>}
           <button className="login-button" type="submit">
-            <span>{isRegisterMode ? "Create account" : "Continue to HelloGPT"}</span>
+            <span>{isRegisterMode ? "Create account" : "Continue to Pagetrail"}</span>
             <ArrowUp size={17} />
           </button>
         </form>
         <p className="auth-switch">
-          {isRegisterMode ? "Already have an account?" : "New to HelloGPT?"}
+          {isRegisterMode ? "Already have an account?" : "New to Pagetrail?"}
           <button type="button" onClick={() => onModeChange(!isRegisterMode)}>
             {isRegisterMode ? "Log in" : "Create an account"}
           </button>
         </p>
-        <p className="login-note">Private by design. Your conversations belong to you.</p>
+        <p className="login-note">Private by design. Your conversations and documents belong to you.</p>
       </section>
     </main>
   );
@@ -151,6 +141,8 @@ function App() {
   const [error, setError] = useState("");
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [fileName, setFileName] = useState("");
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -299,7 +291,7 @@ function App() {
   async function submitMessage(event?: FormEvent) {
     event?.preventDefault();
     const trimmed = input.trim();
-    if (!trimmed || loading) return;
+    if (!trimmed || loading || uploadingFile) return;
     let activeThread = threadId;
     if (!activeThread) {
       const response = await authenticatedFetch("/api/conversations", { method: "POST" });
@@ -309,8 +301,12 @@ function App() {
       setThreadId(activeThread);
       setConversations((current) => [conversation, ...current]);
     }
-    setInput("");
     setError("");
+    if (pendingFile) {
+      const uploaded = await uploadFile(pendingFile, activeThread);
+      if (!uploaded) return;
+    }
+    setInput("");
     setMessages((current) => [...current, { role: "user", content: trimmed }]);
     setLoading(true);
     try {
@@ -336,31 +332,28 @@ function App() {
     }
   }
 
-  async function uploadFile(file: File) {
-    let activeThread = threadId;
-    if (!activeThread) {
-      const response = await authenticatedFetch("/api/conversations", { method: "POST" });
-      if (!response.ok) return;
-      const conversation: Conversation = await response.json();
-      activeThread = conversation.thread_id;
-      setThreadId(activeThread);
-      setConversations((current) => [conversation, ...current]);
-    }
-    
-    
-    
-    if (!activeThread) return;
-    setFileName(file.name);
+  async function uploadFile(file: File, activeThread: string) {
+    setUploadingFile(true);
     const form = new FormData();
     form.append("file", file);
-    const response = await authenticatedFetch(`/api/conversations/${activeThread}/files`, { method: "POST", body: form });
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      const detail = typeof errorData.detail === "string"
-        ? errorData.detail
-        : "This file could not be added to the conversation.";
-      setError(detail);
+    try {
+      const response = await authenticatedFetch(`/api/conversations/${activeThread}/files`, { method: "POST", body: form });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const detail = typeof errorData.detail === "string"
+          ? errorData.detail
+          : "This file could not be added to the conversation.";
+        throw new Error(detail);
+      }
+      setPendingFile(null);
       setFileName("");
+      if (fileRef.current) fileRef.current.value = "";
+      return true;
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "This file could not be added to the conversation.");
+      return false;
+    } finally {
+      setUploadingFile(false);
     }
   }
   
@@ -382,14 +375,14 @@ function App() {
       <aside className={`sidebar ${sidebarOpen ? "sidebar--open" : ""}`}>
         <div className="sidebar-top">
           <button className="brand" onClick={newChat} aria-label="Start a new chat">
-            <span className="brand-mark"><OpenAiLogoIcon size={18} /></span>
-            <span>HelloGPT</span>
+            <span className="brand-mark"><BrandLogo size={18} /></span>
+            <span>Pagetrail</span>
           </button>
           <button className="icon-button sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="Close sidebar"><X size={18} /></button>
         </div>
         <button className="new-chat" onClick={newChat}><Plus size={17} /> New chat <span className="shortcut">Ctrl K</span></button>
         <div className="sidebar-search"><Search size={16} /><input placeholder="Search chats" /></div>
-        <div className="history-heading">Your chats <MoreHorizontal size={17} /></div>
+        <div className="history-heading">Conversations <MoreHorizontal size={17} /></div>
         <nav className="history-list">
           {conversations.length === 0 && <p className="empty-history">Your recent conversations will appear here.</p>}
           {conversations.map((conversation) => (
@@ -449,35 +442,36 @@ function App() {
         <header className="topbar">
           <button className="icon-button menu-button" onClick={() => setSidebarOpen(true)} aria-label="Open sidebar"><Menu size={19} /></button>
           <button className="model-picker" onClick={() => setModel(model === "gemini-3.1-flash-lite" ? "gemini-2.5-flash" : "gemini-3.1-flash-lite")}>
-            <span className="status-dot" /> {model === "gemini-3.1-flash-lite" ? "HelloGPT" : "HelloGPT Fast"} <ChevronDown size={15} />
+            <span className="status-dot" /> {model === "gemini-3.1-flash-lite" ? "Gemini Flash Lite" : "Gemini Flash"} <ChevronDown size={15} />
           </button>
           <div className="topbar-actions"><button className="icon-button" aria-label="Share chat"><MoreHorizontal size={19} /></button><button className="avatar small">{username?.trim() ? username.trim().charAt(0).toUpperCase() : "?"}</button></div>
         </header>
         <section className={`chat-stage ${messages.length ? "chat-stage--active" : ""}`}>
           {messages.length === 0 ? (
             <div className="welcome">
-              <div className="welcome-orb"><OpenAiLogoIcon size={29} /></div>
-              <h1>How can I help you today?</h1>
-              <p>Thoughtful answers, useful ideas, and a little extra clarity.</p>
+              <div className="welcome-orb"><FileText size={29} /></div>
+              <p className="welcome-eyebrow">Your documents, connected</p>
+              <h1>What would you like to find?</h1>
+              <p>Ask your files, search the web, and keep a clear trail back to the source.</p>
               <div className="prompt-grid">{starterPrompts.map((prompt) => <button key={prompt.title} className="prompt-card" onClick={() => setInput(prompt.text)}><span>{prompt.title}</span><small>{prompt.text}</small><ArrowUp size={15} /></button>)}</div>
             </div>
           ) : (
             <div className="message-list">
               {messages.map((message, index) => <Message key={`${message.role}-${index}`} message={message} />)}
-              {loading && <div className="message-row assistant"><div className="assistant-avatar"><OpenAiLogoIcon size={15} /></div><div className="typing"><i /><i /><i /></div></div>}
+              {loading && <div className="message-row assistant"><div className="assistant-avatar"><BrandLogo size={15} /></div><div className="typing"><i /><i /><i /></div></div>}
               <div ref={bottomRef} />
             </div>
           )}
           {error && <div className="error-banner">{error}</div>}
           <form className="composer-wrap" onSubmit={submitMessage}>
-            {fileName && <div className="file-chip"><FileText size={14} /> {fileName}<button type="button" onClick={() => setFileName("")}><X size={13} /></button></div>}
+            {fileName && <div className={`file-chip ${uploadingFile ? "file-chip--uploading" : ""}`}><FileText size={14} /> <span>{fileName}</span>{uploadingFile && <span className="file-chip-status">Uploading...</span>}<button type="button" onClick={() => { setPendingFile(null); setFileName(""); if (fileRef.current) fileRef.current.value = ""; }} disabled={uploadingFile}><X size={13} /></button></div>}
             <div className="composer">
-              <input ref={fileRef} type="file" accept=".pdf,.docx,.txt,.md" hidden onChange={(event) => event.target.files?.[0] && uploadFile(event.target.files[0])} />
+              <input ref={fileRef} type="file" accept=".pdf,.docx,.txt,.md" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) { setPendingFile(file); setFileName(file.name); setError(""); } }} />
               <button type="button" className="composer-button" onClick={() => fileRef.current?.click()} aria-label="Attach file"><Paperclip size={19} /></button>
-              <input value={input} onChange={(event) => setInput(event.target.value)} placeholder="Message HelloGPT..." aria-label="Message HelloGPT" />
+              <input value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask your documents or search the web..." aria-label="Ask your documents or search the web" />
               <button className={`send-button ${input.trim() ? "send-button--ready" : ""}`} aria-label="Send message" disabled={!input.trim() || loading}><ArrowUp size={17} /></button>
             </div>
-            <p className="composer-note">HelloGPT can make mistakes. Check important info.</p>
+            <p className="composer-note">Pagetrail can search your files and the web. Check important information.</p>
           </form>
         </section>
       </main>
@@ -488,8 +482,8 @@ function App() {
 function Message({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
   return <div className={`message-row ${isUser ? "user" : "assistant"}`}>
-    {isUser ? <div className="avatar message-avatar">s</div> : <div className="assistant-avatar"><OpenAiLogoIcon size={15} /></div>}
-    <div className="message-content"><div className="message-role">{isUser ? "You" : "HelloGPT"}</div><div className="message-text">{message.content}</div>{!isUser && <div className="message-actions"><button aria-label="Copy response"><Copy size={14} /></button><button aria-label="Good response"><ThumbsUp size={14} /></button><button aria-label="Bad response"><ThumbsDown size={14} /></button></div>}</div>
+    {isUser ? <div className="avatar message-avatar">s</div> : <div className="assistant-avatar"><BrandLogo size={15} /></div>}
+    <div className="message-content"><div className="message-role">{isUser ? "You" : "Pagetrail"}</div><div className="message-text">{message.content}</div>{!isUser && <div className="message-actions"><button aria-label="Copy response"><Copy size={14} /></button><button aria-label="Good response"><ThumbsUp size={14} /></button><button aria-label="Bad response"><ThumbsDown size={14} /></button></div>}</div>
   </div>;
 }
 

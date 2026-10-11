@@ -1,88 +1,104 @@
-from pathlib import Path
 from datetime import datetime
+from config import settings
+from db_base import Base
+
+from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.engine import URL, make_url
+from sqlalchemy.orm import sessionmaker
 
 
-from sqlalchemy import create_engine, Column, Integer, String, Text, ForeignKey, inspect, text
-from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
+# Path("data").mkdir(exist_ok=True)
 
+# DATABASE_URL = "sqlite:///data/memory.db"
 
-Path("data").mkdir(exist_ok=True)
+# engine = create_engine(DATABASE_URL,connect_args={"check_same_thread":False},
+#                         echo=False)
 
-DATABASE_URL = "sqlite:///data/memory.db"
+if settings.DATABASE_URL:
+    raw_database_url = settings.DATABASE_URL
+    if ":[" in raw_database_url and "]@" in raw_database_url:
+        scheme, remainder = raw_database_url.split("://", 1)
+        credentials, host_part = remainder.split("]@", 1)
+        username, password = credentials.split(":[", 1)
+        host, port_and_database = host_part.split(":", 1)
+        port, database = port_and_database.split("/", 1)
+        database_url = URL.create(
+            drivername="postgresql+psycopg",
+            username=username,
+            password=password,
+            host=host,
+            port=int(port),
+            database=database,
+        )
+    else:
+        parsed_url = make_url(raw_database_url)
+        database_url = parsed_url.set(drivername="postgresql+psycopg")
+else:
+    database_url = URL.create(
+        drivername="postgresql+psycopg",
+        username=settings.DATABASE_USERNAME,
+        password=settings.DATABASE_PASSWORD,
+        host=settings.DATABASE_HOST,
+        port=int(settings.DATABASE_PORT),
+        database=settings.DATABASE_NAME,
+    )
 
-engine = create_engine(DATABASE_URL,connect_args={"check_same_thread":False},
-                        echo=False)
+engine_options = {}
+if database_url.host and database_url.host != "localhost":
+    engine_options["connect_args"] = {"sslmode": "require"}
+engine = create_engine(database_url, **engine_options)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
 
 
-def utcnow_iso(_context=None) -> str:
-    return datetime.utcnow().isoformat()
+from models import Conversation, ChatMessage, LongTermMemory
 
 
-class Conversation(Base):
-    __tablename__ = "conversations"
-
-    id = Column(Integer, primary_key=True, index=True)
-    thread_id = Column(String(255), unique=True, nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
-    name = Column(String(255), nullable=False)
-    created_at = Column(String(255), default=utcnow_iso)
-    updated_at = Column(String(255), default=utcnow_iso, onupdate=utcnow_iso)
-    messages = relationship("ChatMessage", back_populates="conversation", cascade="all, delete-orphan")
-    long_term_memories = relationship(
-    "LongTermMemory",
-    back_populates="conversation",
-    cascade="all, delete-orphan"
-)
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
-class User(Base):
-    __tablename__ = "users"
-
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(255), unique=True, nullable=False, index=True)
-    password_hash = Column(String(255), nullable=False)
-
-
-class ChatMessage(Base):
-    __tablename__ = "chat_messages"
-
-    id = Column(Integer, primary_key=True, index=True)
-    thread_id = Column(String,ForeignKey("conversations.thread_id"), nullable=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
-    role = Column(String(50), nullable=False)
-    content = Column(Text, nullable=False)
-    created_at = Column(String(255), default=utcnow_iso)
-    updated_at = Column(String(255), default=utcnow_iso, onupdate=utcnow_iso)
-
-    conversation = relationship("Conversation", back_populates="messages")
-
-
-class LongTermMemory(Base):
-    __tablename__ = "long_term_memory"
-
-    id = Column(Integer, primary_key=True, index=True)
-    thread_id = Column(String,ForeignKey("conversations.thread_id"))
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
-    content = Column(Text, nullable=False)
-    created_at = Column(String(255), default=utcnow_iso)
-    updated_at = Column(String(255), default=utcnow_iso, onupdate=utcnow_iso)
-
-    conversation = relationship("Conversation", back_populates="long_term_memories")
+# # --- Test the Connection ---
+# if __name__ == "__main__":
+#     print("🔄 Checking database connection...")
+#     try:
+#         # Open a quick session using your get_db generator
+#         db = next(get_db())
+        
+#         # Run a simple query to see if the DB responds
+#         db.execute(text("SELECT 1"))
+#         print("✅ Success! Your database is connected and running perfectly.")
+        
+#         db.close()
+#     except Exception as e:
+#         print(f"❌ Connection failed! Error details:\n{e}")
 
 
 def init_db():
     Base.metadata.create_all(bind=engine)
     inspector = inspect(engine)
+    rls_tables = (
+        "users",
+        "conversations",
+        "chat_messages",
+        "long_term_memory",
+        "rag_documents",
+    )
     migrations = {
         "conversations": "user_id",
         "chat_messages": "user_id",
         "long_term_memory": "user_id",
     }
     with engine.begin() as connection:
+        for table_name in rls_tables:
+            connection.execute(
+                text(f"ALTER TABLE public.{table_name} ENABLE ROW LEVEL SECURITY")
+            )
         for table_name, column_name in migrations.items():
             if column_name not in {column["name"] for column in inspector.get_columns(table_name)}:
                 connection.execute(
@@ -91,6 +107,9 @@ def init_db():
                         "INTEGER REFERENCES users(id)"
                     )
                 )
+
+
+
 
 
 def create_update_convo(

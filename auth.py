@@ -7,14 +7,21 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
+from schemas import UserCreate, UserResponse, TokenResponse
 
+
+
+
+
+from datetime import datetime, timedelta, timezone
+from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordBearer,OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-
-from db import SessionLocal, User
+from models import User
+from db import SessionLocal
 
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -27,21 +34,6 @@ JWT_SECRET_KEY = os.getenv(
 JWT_ALGORITHM = "HS256"
 
 
-class UserCreate(BaseModel):
-    username: str = Field(min_length=3, max_length=255, pattern=r"^[A-Za-z0-9_.-]+$")
-    password: str = Field(min_length=8, max_length=128)
-
-
-class UserResponse(BaseModel):
-    id: int
-    username: str
-
-    model_config = {"from_attributes": True}
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str
 
 
 def get_db():
@@ -55,9 +47,9 @@ def get_db():
 def _encode_segment(value: bytes) -> str:
     return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
 
-
 def _decode_segment(value: str) -> bytes:
-    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode(value + padding)
 
 
 def _hash_password(password: str) -> str:
@@ -74,9 +66,12 @@ def _verify_password(password: str, encoded_hash: str) -> bool:
         rounds = int(rounds_text)
         salt = _decode_segment(salt_text)
         expected = _decode_segment(digest_text)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, binascii.Error):
         return False
-    actual = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, rounds)
+    try:
+        actual = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, rounds)
+    except (TypeError, ValueError, OverflowError):
+        return False
     return hmac.compare_digest(actual, expected)
 
 

@@ -21,7 +21,6 @@ langchainhub==0.1.21
 # PostgreSQL Database & Persistence
 SQLAlchemy==2.0.52
 langgraph-checkpoint-postgres
-langchain-postgres
 psycopg[binary]
 
 # Document Parsing & Storage
