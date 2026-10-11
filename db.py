@@ -80,8 +80,6 @@ def get_db():
 
 
 def init_db():
-    Base.metadata.create_all(bind=engine)
-    inspector = inspect(engine)
     rls_tables = (
         "users",
         "conversations",
@@ -95,12 +93,20 @@ def init_db():
         "long_term_memory": "user_id",
     }
     with engine.begin() as connection:
+        # Keep schema initialization and inspection on one connection and give
+        # remote PostgreSQL metadata queries enough time to complete.
+        connection.exec_driver_sql("SET LOCAL statement_timeout = '30s'")
+        Base.metadata.create_all(bind=connection)
+        inspector = inspect(connection)
         for table_name in rls_tables:
             connection.execute(
                 text(f"ALTER TABLE public.{table_name} ENABLE ROW LEVEL SECURITY")
             )
         for table_name, column_name in migrations.items():
-            if column_name not in {column["name"] for column in inspector.get_columns(table_name)}:
+            existing_columns = {
+                column["name"] for column in inspector.get_columns(table_name)
+            }
+            if column_name not in existing_columns:
                 connection.execute(
                     text(
                         f"ALTER TABLE {table_name} ADD COLUMN {column_name} "
