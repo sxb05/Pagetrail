@@ -7,7 +7,6 @@ from langchain_tavily import TavilySearch
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import StateGraph, START, END, MessagesState
 from langgraph.prebuilt import ToolNode, tools_condition
-from langgraph.checkpoint.sqlite import SqliteSaver
 import sqlite3
 from tools import tools
 
