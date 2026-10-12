@@ -10,7 +10,9 @@ from langgraph.prebuilt import ToolNode, tools_condition
 import sqlite3
 from tools import tools
 
-
+from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.prebuilt import tools_condition
+from langgraph.graph import StateGraph, START
 
 
 load_dotenv()
@@ -233,8 +235,9 @@ If required information is missing:
             "messages": [response]
         }
 
-
-
+connection_string = database_url.render_as_string(hide_password=False)
+with PostgresSaver.from_conn_string(connection_string) as checkpointer:
+    checkpointer.setup()
     toolnode = ToolNode(tools)
 
     workflow = StateGraph(MessagesState)
@@ -246,14 +249,11 @@ If required information is missing:
     workflow.add_conditional_edges("chatbot", tools_condition)
     workflow.add_edge("tools", "chatbot")
 
-    conn = sqlite3.connect(
-    "data/langgraph_checkpoint.dqlite",
-    check_same_thread=False)
+  
 
-    checkpointer = SqliteSaver(conn)
+ 
 
-    return workflow.compile(checkpointer=checkpointer)
-
+    app = workflow.compile(checkpointer=checkpointer)
 
 
 _AGENT_CACHE = {}
