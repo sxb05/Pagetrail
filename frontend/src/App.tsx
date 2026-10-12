@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import brandLogoUrl from "./assets/pagetrail-icon.png";
 import {
   ArrowUp,
   ChevronDown,
@@ -20,6 +21,20 @@ import {
 type Conversation = { thread_id: string; name: string; updated_at?: string };
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
+function publicErrorMessage(detail: unknown, fallback: string): string {
+  const text = typeof detail === "string"
+    ? detail
+    : Array.isArray(detail) && detail[0] && typeof detail[0].msg === "string"
+      ? detail[0].msg
+      : fallback;
+  if (
+    /postgresql:\/\/|postgres:\/\/|DATABASE_|password|sslmode|supabase\.com:\d+/i.test(text)
+  ) {
+    return fallback;
+  }
+  return text;
+}
+
 const starterPrompts = [
   { title: "Ask my documents", text: "What are the key points in the documents I uploaded?" },
   { title: "Find an answer", text: "Search my files and explain the answer with the source." },
@@ -27,7 +42,99 @@ const starterPrompts = [
 ];
 
 function BrandLogo({ size = 20 }: { size?: number }) {
-  return <img className="brand-logo-image" src="/pagetrail-icon.png" width={size} height={size} alt="" aria-hidden="true" />;
+  return (
+    <img
+      className="brand-logo-image"
+      src={brandLogoUrl}
+      width={size}
+      height={size}
+      alt=""
+      aria-hidden="true"
+    />
+  );
+}
+
+function renderInline(text: string, keyPrefix: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const pattern = /(\*\*[^*]+?\*\*|`[^`]+`)/g;
+  let last = 0;
+  let match: RegExpExecArray | null;
+  let index = 0;
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > last) {
+      nodes.push(text.slice(last, match.index));
+    }
+    const token = match[0];
+    if (token.startsWith("**")) {
+      nodes.push(<strong key={`${keyPrefix}-b-${index}`}>{token.slice(2, -2)}</strong>);
+    } else {
+      nodes.push(<code key={`${keyPrefix}-c-${index}`}>{token.slice(1, -1)}</code>);
+    }
+    last = match.index + token.length;
+    index += 1;
+  }
+  if (last < text.length) {
+    nodes.push(text.slice(last));
+  }
+  return nodes;
+}
+
+function AssistantText({ content }: { content: string }) {
+  const blocks = content.split(/```/);
+  const elements: ReactNode[] = [];
+
+  blocks.forEach((block, index) => {
+    if (index % 2 === 1) {
+      const newline = block.indexOf("\n");
+      const code = newline === -1 ? block : block.slice(newline + 1);
+      elements.push(
+        <pre key={`code-${index}`} className="message-code">
+          <code>{code.replace(/\n$/, "")}</code>
+        </pre>,
+      );
+      return;
+    }
+
+    let listItems: string[] = [];
+    const flushList = () => {
+      if (!listItems.length) return;
+      const items = listItems;
+      listItems = [];
+      elements.push(
+        <ul key={`ul-${index}-${elements.length}`} className="message-list-items">
+          {items.map((item, itemIndex) => (
+            <li key={itemIndex}>{renderInline(item, `li-${index}-${itemIndex}`)}</li>
+          ))}
+        </ul>,
+      );
+    };
+
+    block.split("\n").forEach((line, lineIndex) => {
+      const bullet = line.match(/^\s*[-*]\s+(.*)$/);
+      if (bullet) {
+        listItems.push(bullet[1]);
+        return;
+      }
+      flushList();
+      const heading = line.match(/^(#{1,3})\s+(.*)$/);
+      if (heading) {
+        const Tag = (`h${heading[1].length}` as "h1" | "h2" | "h3");
+        elements.push(
+          <Tag key={`h-${index}-${lineIndex}`} className="message-heading">
+            {renderInline(heading[2], `h-${index}-${lineIndex}`)}
+          </Tag>,
+        );
+        return;
+      }
+      if (!line.trim()) return;
+      elements.push(
+        <p key={`p-${index}-${lineIndex}`}>{renderInline(line, `p-${index}-${lineIndex}`)}</p>,
+      );
+    });
+    flushList();
+  });
+
+  return <div className="message-text message-text--rich">{elements}</div>;
 }
 
 const backgroundOrbs = [
@@ -43,8 +150,8 @@ function AuthMotionBackground() {
     <div className="auth-motion-background" aria-hidden="true">
       <motion.div
         className="auth-mesh"
-        animate={prefersReducedMotion ? undefined : { rotate: 360, scale: [1, 1.08, 1] }}
-        transition={prefersReducedMotion ? undefined : { rotate: { duration: 60, repeat: Infinity, ease: "linear" }, scale: { duration: 16, repeat: Infinity, ease: "easeInOut" } }}
+        animate={prefersReducedMotion ? undefined : { rotate: 360, scale: [1, 1.03, 1] }}
+        transition={prefersReducedMotion ? undefined : { rotate: { duration: 96, repeat: Infinity, ease: "linear" }, scale: { duration: 24, repeat: Infinity, ease: "easeInOut" } }}
       />
       {backgroundOrbs.map((orb, index) => (
         <motion.div
@@ -52,14 +159,9 @@ function AuthMotionBackground() {
           key={orb.className}
           initial={orb.initial}
           animate={prefersReducedMotion ? orb.initial : orb.animate}
-          transition={prefersReducedMotion ? undefined : { duration: 9 + index * 2, repeat: Infinity, repeatType: "mirror", ease: "easeInOut", delay: index * -1.5 }}
+          transition={prefersReducedMotion ? undefined : { duration: 18 + index * 5, repeat: Infinity, repeatType: "mirror", ease: "easeInOut", delay: index * -2 }}
         />
       ))}
-      <motion.div
-        className="auth-scanline"
-        animate={prefersReducedMotion ? undefined : { y: ["-15vh", "115vh"] }}
-        transition={prefersReducedMotion ? undefined : { duration: 2, repeat: Infinity, ease: "linear", repeatDelay: 2 }}
-      />
     </div>
   );
 }
@@ -84,11 +186,21 @@ function AuthPage({ error, isRegisterMode, onModeChange, onSubmit }: AuthPagePro
         </div>
         <div className="login-heading">
           <div className="login-orb" aria-hidden="true"><BrandLogo size={30} /></div>
-          <p className="login-eyebrow">{isRegisterMode ? "Start creating" : "Welcome back"}</p>
-          <h1 id="login-title">{isRegisterMode ? "Create your account" : "Your ideas, in one place."}</h1>
-          <p>{isRegisterMode
-            ? "Set up your private AI workspace in a few seconds."
-            : "Sign in to continue your conversations, ideas, and work."}</p>
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={isRegisterMode ? "register" : "login"}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <p className="login-eyebrow">{isRegisterMode ? "Start creating" : "Welcome back"}</p>
+              <h1 id="login-title">{isRegisterMode ? "Create your account" : "Your ideas, in one place."}</h1>
+              <p>{isRegisterMode
+                ? "Set up your private AI workspace in a few seconds."
+                : "Sign in to continue your conversations, ideas, and work."}</p>
+            </motion.div>
+          </AnimatePresence>
         </div>
         <form className="auth-form" onSubmit={onSubmit}>
           <label className="auth-field">
@@ -174,7 +286,10 @@ function App() {
         if (!registrationResponse.ok) {
           const errorData = await registrationResponse.json().catch(() => ({}));
           throw new Error(
-            errorData.detail || "Registration failed. Username might be taken.",
+            publicErrorMessage(
+              errorData.detail,
+              "Registration failed. Username might be taken.",
+            ),
           );
         }
       }
@@ -188,7 +303,9 @@ function App() {
 
       if (!tokenResponse.ok) {
         const errorData = await tokenResponse.json().catch(() => ({}));
-        throw new Error(errorData.detail || "Invalid username or password.");
+        throw new Error(
+          publicErrorMessage(errorData.detail, "Invalid username or password."),
+        );
       }
 
       const data = await tokenResponse.json();
@@ -316,7 +433,9 @@ function App() {
         body: JSON.stringify({ thread_id: activeThread, message: trimmed, model }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "Something went wrong.");
+      if (!response.ok) {
+        throw new Error(publicErrorMessage(data.detail, "Something went wrong."));
+      }
       setMessages((current) => [...current, data]);
       setConversations((current) =>
         current.map((conversation) =>
@@ -340,10 +459,12 @@ function App() {
       const response = await authenticatedFetch(`/api/conversations/${activeThread}/files`, { method: "POST", body: form });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        const detail = typeof errorData.detail === "string"
-          ? errorData.detail
-          : "This file could not be added to the conversation.";
-        throw new Error(detail);
+        throw new Error(
+          publicErrorMessage(
+            errorData.detail,
+            "This file could not be added to the conversation.",
+          ),
+        );
       }
       setPendingFile(null);
       setFileName("");
@@ -483,7 +604,7 @@ function Message({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
   return <div className={`message-row ${isUser ? "user" : "assistant"}`}>
     {isUser ? <div className="avatar message-avatar">s</div> : <div className="assistant-avatar"><BrandLogo size={15} /></div>}
-    <div className="message-content"><div className="message-role">{isUser ? "You" : "Pagetrail"}</div><div className="message-text">{message.content}</div>{!isUser && <div className="message-actions"><button aria-label="Copy response"><Copy size={14} /></button><button aria-label="Good response"><ThumbsUp size={14} /></button><button aria-label="Bad response"><ThumbsDown size={14} /></button></div>}</div>
+    <div className="message-content"><div className="message-role">{isUser ? "You" : "Pagetrail"}</div>{isUser ? <div className="message-text">{message.content}</div> : <AssistantText content={message.content} />}{!isUser && <div className="message-actions"><button aria-label="Copy response"><Copy size={14} /></button><button aria-label="Good response"><ThumbsUp size={14} /></button><button aria-label="Bad response"><ThumbsDown size={14} /></button></div>}</div>
   </div>;
 }
 

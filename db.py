@@ -15,27 +15,19 @@ from sqlalchemy.orm import sessionmaker
 # engine = create_engine(DATABASE_URL,connect_args={"check_same_thread":False},
 #                         echo=False)
 
-if settings.DATABASE_URL:
-    raw_database_url = settings.DATABASE_URL
-    if ":[" in raw_database_url and "]@" in raw_database_url:
-        scheme, remainder = raw_database_url.split("://", 1)
-        credentials, host_part = remainder.split("]@", 1)
-        username, password = credentials.split(":[", 1)
-        host, port_and_database = host_part.split(":", 1)
-        port, database = port_and_database.split("/", 1)
-        database_url = URL.create(
-            drivername="postgresql+psycopg",
-            username=username,
-            password=password,
-            host=host,
-            port=int(port),
-            database=database,
-        )
-    else:
-        parsed_url = make_url(raw_database_url)
-        database_url = parsed_url.set(drivername="postgresql+psycopg")
-else:
-    database_url = URL.create(
+def _looks_like_database_url(value: str) -> bool:
+    stripped = value.strip()
+    if stripped.startswith(("f\"", "f'", "F\"", "F'")):
+        return False
+    return stripped.startswith(("postgresql://", "postgres://", "postgresql+psycopg://"))
+
+
+def _database_url() -> URL:
+    # Build from discrete fields so passwords with @, &, :, / stay unparsed as host.
+    if settings.DATABASE_URL and _looks_like_database_url(settings.DATABASE_URL):
+        parsed_url = make_url(settings.DATABASE_URL.strip())
+        return parsed_url.set(drivername="postgresql+psycopg")
+    return URL.create(
         drivername="postgresql+psycopg",
         username=settings.DATABASE_USERNAME,
         password=settings.DATABASE_PASSWORD,
@@ -44,10 +36,17 @@ else:
         database=settings.DATABASE_NAME,
     )
 
-engine_options = {}
+
+database_url = _database_url()
+
+connect_args: dict = {}
 if database_url.host and database_url.host != "localhost":
-    engine_options["connect_args"] = {"sslmode": "require"}
-engine = create_engine(database_url, **engine_options)
+    connect_args["sslmode"] = "require"
+engine = create_engine(
+    database_url,
+    pool_pre_ping=True,
+    connect_args=connect_args,
+)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

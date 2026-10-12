@@ -14,6 +14,9 @@ from tools import tools
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.prebuilt import tools_condition
 from langgraph.graph import StateGraph, START
+from psycopg.conninfo import make_conninfo
+from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 
 
 load_dotenv()
@@ -108,6 +111,10 @@ def build_agent(model_name: str):
     - Excessive verbosity
     - Generic motivational language
     - Pretending certainty when uncertain
+    - Chain-of-thought, hidden reasoning, XML tags, or tool-call JSON in the user-visible answer
+    - Wrapping the entire answer in a markdown code fence
+
+    Write only the user-facing answer. Keep it clean and readable.
 
     For simple questions, answer simply.
 
@@ -236,28 +243,54 @@ def build_agent(model_name: str):
                 "messages": [response]
             }
 
-    connection_string = database_url.render_as_string(hide_password=False)
-    with PostgresSaver.from_conn_string(connection_string) as checkpointer:
-        checkpointer.setup()
-        toolnode = ToolNode(tools)
+    toolnode = ToolNode(tools)
 
-        workflow = StateGraph(MessagesState)
+    workflow = StateGraph(MessagesState)
 
-        workflow.add_node("chatbot", chatnode)
-        workflow.add_node("tools", toolnode)
+    workflow.add_node("chatbot", chatnode)
+    workflow.add_node("tools", toolnode)
 
-        workflow.add_edge(START, "chatbot")
-        workflow.add_conditional_edges("chatbot", tools_condition)
-        workflow.add_edge("tools", "chatbot")
+    workflow.add_edge(START, "chatbot")
+    workflow.add_conditional_edges("chatbot", tools_condition)
+    workflow.add_edge("tools", "chatbot")
 
-  
-
- 
-
-    app = workflow.compile(checkpointer=checkpointer)
+    return workflow.compile(checkpointer=get_checkpointer())
 
 
+_checkpoint_pool: ConnectionPool | None = None
+_checkpointer: PostgresSaver | None = None
 _AGENT_CACHE = {}
+
+
+def _checkpoint_conninfo() -> str:
+    # libpq conninfo, not a SQLAlchemy URL (postgresql+psycopg:// is rejected).
+    sslmode = "require" if database_url.host and database_url.host != "localhost" else "prefer"
+    return make_conninfo(
+        host=database_url.host or "localhost",
+        port=database_url.port or 5432,
+        dbname=database_url.database or "postgres",
+        user=database_url.username,
+        password=database_url.password,
+        sslmode=sslmode,
+    )
+
+
+def get_checkpointer() -> PostgresSaver:
+    global _checkpoint_pool, _checkpointer
+    if _checkpointer is None:
+        _checkpoint_pool = ConnectionPool(
+            conninfo=_checkpoint_conninfo(),
+            min_size=1,
+            max_size=5,
+            kwargs={
+                "autocommit": True,
+                "prepare_threshold": 0,
+                "row_factory": dict_row,
+            },
+        )
+        _checkpointer = PostgresSaver(_checkpoint_pool)
+        _checkpointer.setup()
+    return _checkpointer
 
 def get_agent(model_name: str):
 

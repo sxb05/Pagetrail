@@ -1,13 +1,16 @@
+import logging
+import re
 import uuid
 from pathlib import Path
 from typing import Any
 
 import uvicorn
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import SQLAlchemyError
 
 from agent import get_agent
 from auth import CurrentUser, router as auth_router
@@ -23,6 +26,7 @@ from db import (
 from rag import add_document_to_vector_store, retrieve_documents
 from tools import set_current_thid
 
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="PageTrail")
 app.include_router(auth_router)
@@ -35,9 +39,19 @@ app.add_middleware(
 )
 
 FRONTEND = Path(__file__).parent / "frontend" / "dist"
+BRAND_ICON = Path(__file__).parent / "frontend" / "pagetrail-icon.png"
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024
+
+
+@app.exception_handler(SQLAlchemyError)
+async def sqlalchemy_error_handler(_request: Request, exc: SQLAlchemyError) -> JSONResponse:
+    logger.exception("Database error", exc_info=exc)
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "The database is temporarily unavailable. Please try again."},
+    )
 
 
 @app.on_event("startup")
@@ -66,11 +80,47 @@ def message_content(message: Any) -> str:
     if isinstance(content, str):
         return content
     if isinstance(content, list):
-        return "".join(
-            part.get("text", "") if isinstance(part, dict) else str(part)
-            for part in content
-        )
-    return str(content)
+        parts: list[str] = []
+        for part in content:
+            if isinstance(part, str):
+                parts.append(part)
+                continue
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") in {"thinking", "thought"} or "thought" in part:
+                continue
+            text = part.get("text")
+            if isinstance(text, str):
+                parts.append(text)
+        return "".join(parts)
+    return str(content) if content is not None else ""
+
+
+def clean_llm_output(text: str) -> str:
+    cleaned = text.replace("\r\n", "\n").strip()
+    cleaned = re.sub(r"<think(?:ing)?>[\s\S]*?</think(?:ing)?>", "", cleaned, flags=re.I)
+    cleaned = re.sub(r"</?think(?:ing)?>", "", cleaned, flags=re.I)
+    fenced = re.fullmatch(r"```(?:markdown|md|text)?\s*\n([\s\S]*?)\n```", cleaned)
+    if fenced:
+        cleaned = fenced.group(1).strip()
+    cleaned = re.sub(
+        r"```(?:json)?\s*\{\s*\"(?:name|tool_calls|function)\"[\s\S]*?\}\s*```",
+        "",
+        cleaned,
+        flags=re.I,
+    )
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
+def last_assistant_text(messages: list[Any]) -> str:
+    for message in reversed(messages):
+        if getattr(message, "type", None) == "tool":
+            continue
+        text = clean_llm_output(message_content(message))
+        if text:
+            return text
+    return "I was unable to produce a response. Please try again."
 
 
 @app.get("/api/conversations")
@@ -135,10 +185,13 @@ def chat(request: ChatRequest, current_user: CurrentUser) -> dict[str, str]:
             {"messages": [{"role": "user", "content": prompt}]},
             config={"configurable": {"thread_id": request.thread_id}},
         )
-        assistant_message = result["messages"][-1]
-        answer = message_content(assistant_message)
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Unable to generate a response: {exc}") from exc
+        answer = last_assistant_text(result["messages"])
+    except Exception:
+        logger.exception("Chat generation failed")
+        raise HTTPException(
+            status_code=502,
+            detail="Unable to generate a response. Please try again.",
+        ) from None
 
     save_chat_message(request.thread_id, current_user.id, "assistant", answer)
     return {"role": "assistant", "content": answer}
@@ -171,20 +224,51 @@ async def upload_file(
         return result
     except HTTPException:
         raise
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Unable to index file: {exc}") from exc
+    except Exception:
+        logger.exception("File indexing failed")
+        raise HTTPException(
+            status_code=422,
+            detail="Unable to index file. Please try a different document.",
+        ) from None
     finally:
         destination.unlink(missing_ok=True)
         await file.close()
 
 
+def _frontend_file(path: str) -> Path | None:
+    root = FRONTEND.resolve()
+    requested = (root / path).resolve()
+    if requested != root and root not in requested.parents:
+        return None
+    return requested if requested.is_file() else None
+
+
+@app.get("/pagetrail-icon.png", include_in_schema=False)
+@app.get("/favicon.png", include_in_schema=False)
+def brand_icon(request: Request) -> FileResponse:
+    name = Path(request.url.path).name
+    for candidate in (
+        FRONTEND / name,
+        Path(__file__).parent / "frontend" / "public" / name,
+        Path(__file__).parent / "frontend" / name,
+        BRAND_ICON,
+    ):
+        if candidate.is_file():
+            return FileResponse(candidate, media_type="image/png")
+    raise HTTPException(status_code=404, detail="Icon not found.")
+
+
 if FRONTEND.exists():
-    app.mount("/assets", StaticFiles(directory=FRONTEND / "assets"), name="assets")
+    assets = FRONTEND / "assets"
+    if assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=assets), name="assets")
 
     @app.get("/{path:path}", include_in_schema=False)
     def frontend(path: str) -> FileResponse:
-        requested = FRONTEND / path
-        return FileResponse(requested if requested.is_file() else FRONTEND / "index.html")
+        requested = _frontend_file(path)
+        if requested is not None:
+            return FileResponse(requested)
+        return FileResponse(FRONTEND / "index.html")
 
 
 if __name__ == "__main__":
