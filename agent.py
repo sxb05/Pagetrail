@@ -1,4 +1,5 @@
 import os
+from db import database_url
 from pathlib import Path
 from dotenv import load_dotenv
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
