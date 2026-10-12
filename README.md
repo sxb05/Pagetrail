@@ -22,7 +22,8 @@ document chunks.
 
 ## Environment
 
-Create a `.env` file in the repository root. Never commit this file.
+Copy `.env.example` to `.env` in the repository root and fill in real values.
+Never commit `.env`.
 
 Use the Supabase database URI from:
 

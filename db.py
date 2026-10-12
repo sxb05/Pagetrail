@@ -1,4 +1,5 @@
 from datetime import datetime
+from urllib.parse import quote
 from config import settings
 from db_base import Base
 
@@ -21,16 +22,11 @@ if settings.DATABASE_URL:
         scheme, remainder = raw_database_url.split("://", 1)
         credentials, host_part = remainder.split("]@", 1)
         username, password = credentials.split(":[", 1)
-        host, port_and_database = host_part.split(":", 1)
-        port, database = port_and_database.split("/", 1)
-        database_url = URL.create(
-            drivername="postgresql+psycopg",
-            username=username,
-            password=password,
-            host=host,
-            port=int(port),
-            database=database,
+        normalized_database_url = (
+            f"{scheme}://{username}:{quote(password, safe='')}@{host_part}"
         )
+        parsed_url = make_url(normalized_database_url)
+        database_url = parsed_url.set(drivername="postgresql+psycopg")
     else:
         parsed_url = make_url(raw_database_url)
         database_url = parsed_url.set(drivername="postgresql+psycopg")
