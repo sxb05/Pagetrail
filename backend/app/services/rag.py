@@ -1,23 +1,20 @@
 import json
 import math
 from pathlib import Path
-from dotenv import load_dotenv
 from typing import List
 from uuid import uuid4
 
-from db import engine
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+import docx2txt
 from langchain_core.documents import Document
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from pypdf import PdfReader
 from sqlalchemy import Column, MetaData, String, Table, Text, insert, select
 
-from pypdf import PdfReader
-import docx2txt
+from app.core.paths import UPLOAD_DIR
+from app.db.session import engine
 
-
-load_dotenv()
-
-Path("uploads").mkdir(exist_ok=True)
+UPLOAD_DIR.mkdir(exist_ok=True)
 
 embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
 
@@ -31,6 +28,8 @@ rag_documents = Table(
     Column("source", String(255), nullable=False),
     Column("embedding", Text, nullable=False),
 )
+
+
 def init_rag_db() -> None:
     metadata.create_all(bind=engine)
 
@@ -49,11 +48,11 @@ def read_pdf(file_path: str) -> str:
         return text
     if suffix == ".docx":
         text = docx2txt.process(file_path)
-        return text 
-    if suffix in [ ".txt", ".md"]:
-        return file_path.read_text(encoding="utf-8", errors = "ignore")
+        return text
+    if suffix in [".txt", ".md"]:
+        return file_path.read_text(encoding="utf-8", errors="ignore")
 
-    raise ValueError(f"Unsupported file type: {suffix}, Please provide a PDF, DOCX, TXT, or MD file.") 
+    raise ValueError(f"Unsupported file type: {suffix}, Please provide a PDF, DOCX, TXT, or MD file.")
 
 
 def add_document_to_vector_store(file_path: str, thread_id: str):
@@ -70,7 +69,7 @@ def add_document_to_vector_store(file_path: str, thread_id: str):
         )
         for chunk in chunks
     ]
-    
+
     vectors = embeddings.embed_documents([document.page_content for document in documents])
     rows = [
         {
@@ -85,7 +84,7 @@ def add_document_to_vector_store(file_path: str, thread_id: str):
     with engine.begin() as connection:
         connection.execute(insert(rag_documents), rows)
 
-    return{ "filename" : Path(file_path).name, "num_chunks": len(chunks)}
+    return {"filename": Path(file_path).name, "num_chunks": len(chunks)}
 
 
 def _cosine_similarity(first: List[float], second: List[float]) -> float:

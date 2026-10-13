@@ -7,22 +7,15 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
-from schemas import UserCreate, UserResponse, TokenResponse
 
-
-
-
-
-from datetime import datetime, timedelta, timezone
-from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer,OAuth2PasswordRequestForm
-from pydantic import BaseModel, Field
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from models import User
-from db import SessionLocal
 
+from app.db.models import User
+from app.db.session import SessionLocal
+from app.schemas.auth import TokenResponse, UserCreate, UserResponse
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
@@ -32,8 +25,6 @@ JWT_SECRET_KEY = os.getenv(
     "development-only-change-this-secret-before-deployment",
 )
 JWT_ALGORITHM = "HS256"
-
-
 
 
 def get_db():
@@ -46,6 +37,7 @@ def get_db():
 
 def _encode_segment(value: bytes) -> str:
     return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+
 
 def _decode_segment(value: str) -> bytes:
     padding = "=" * (-len(value) % 4)
@@ -165,7 +157,7 @@ def login(
 ) -> TokenResponse:
     user = _authenticate_user(db, form_data.username, form_data.password)
     if user is None:
-        
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password.",

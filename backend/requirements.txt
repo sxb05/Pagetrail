@@ -33,3 +33,4 @@ fastapi
 uvicorn
 python-multipart
 pydantic==2.13.5
+pydantic-settings

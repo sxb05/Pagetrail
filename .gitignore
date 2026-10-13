@@ -7,6 +7,8 @@ frontend/*.tsbuildinfo
 frontend/vite.config.js
 frontend/vite.config.d.ts
 __pycache__/
+backend/**/__pycache__/
+uploads/
 memory.db
 .chroma/
 chroma/

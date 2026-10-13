@@ -16,3 +16,5 @@ node_modules
 *.jpg
 *.jpeg
 *.ipynb
+notebooks
+backend/**/__pycache__

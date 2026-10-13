@@ -1,19 +1,13 @@
 from datetime import datetime
-from config import settings
-from db_base import Base
 
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.orm import sessionmaker
 
+from app.core.config import settings
+from app.db.base import Base
+from app.db.models import ChatMessage, Conversation, LongTermMemory
 
-
-# Path("data").mkdir(exist_ok=True)
-
-# DATABASE_URL = "sqlite:///data/memory.db"
-
-# engine = create_engine(DATABASE_URL,connect_args={"check_same_thread":False},
-#                         echo=False)
 
 def _looks_like_database_url(value: str) -> bool:
     stripped = value.strip()
@@ -51,31 +45,12 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-from models import Conversation, ChatMessage, LongTermMemory
-
-
 def get_db():
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
-
-
-# # --- Test the Connection ---
-# if __name__ == "__main__":
-#     print("🔄 Checking database connection...")
-#     try:
-#         # Open a quick session using your get_db generator
-#         db = next(get_db())
-        
-#         # Run a simple query to see if the DB responds
-#         db.execute(text("SELECT 1"))
-#         print("✅ Success! Your database is connected and running perfectly.")
-        
-#         db.close()
-#     except Exception as e:
-#         print(f"❌ Connection failed! Error details:\n{e}")
 
 
 def init_db():
@@ -112,9 +87,6 @@ def init_db():
                         "INTEGER REFERENCES users(id)"
                     )
                 )
-
-
-
 
 
 def create_update_convo(
@@ -156,9 +128,12 @@ def conversation_belongs_to_user(thread_id: str, user_id: int) -> bool:
 def list_conversations(user_id: int):
     session = SessionLocal()
     try:
-        conversations = (session.query(Conversation)
-                         .filter(Conversation.user_id == user_id)
-                         .order_by(Conversation.updated_at.desc()).all())
+        conversations = (
+            session.query(Conversation)
+            .filter(Conversation.user_id == user_id)
+            .order_by(Conversation.updated_at.desc())
+            .all()
+        )
         return conversations
     except Exception as e:
         raise e
@@ -166,12 +141,14 @@ def list_conversations(user_id: int):
         session.close()
 
 
-
 def save_chat_message(thread_id: str, user_id: int, role: str, content: str) -> bool:
     session = SessionLocal()
     try:
-        conversation = (session.query(Conversation)
-                        .filter_by(thread_id=thread_id, user_id=user_id).first())
+        conversation = (
+            session.query(Conversation)
+            .filter_by(thread_id=thread_id, user_id=user_id)
+            .first()
+        )
         if conversation is None:
             return False
         message = ChatMessage(
@@ -186,6 +163,7 @@ def save_chat_message(thread_id: str, user_id: int, role: str, content: str) -> 
         raise e
     finally:
         session.close()
+
 
 def save_memory(thread_id: str, content: str):
     session = SessionLocal()
@@ -225,10 +203,14 @@ def save_memory(thread_id: str, content: str):
 def search_memory(thread_id: str, query: str):
     session = SessionLocal()
     try:
-        memories = (session.query(LongTermMemory)
-                    .filter(LongTermMemory.thread_id == thread_id,
-                            LongTermMemory.content.contains(query))
-                    .all())
+        memories = (
+            session.query(LongTermMemory)
+            .filter(
+                LongTermMemory.thread_id == thread_id,
+                LongTermMemory.content.contains(query),
+            )
+            .all()
+        )
         return memories
     except Exception as e:
         raise e
@@ -239,11 +221,15 @@ def search_memory(thread_id: str, query: str):
 def get_chat_history(thread_id: str, user_id: int):
     session = SessionLocal()
     try:
-        messages = (session.query(ChatMessage)
-                    .filter(ChatMessage.thread_id == thread_id,
-                            ChatMessage.user_id == user_id)
-                    .order_by(ChatMessage.created_at.asc())
-                    .all())
+        messages = (
+            session.query(ChatMessage)
+            .filter(
+                ChatMessage.thread_id == thread_id,
+                ChatMessage.user_id == user_id,
+            )
+            .order_by(ChatMessage.created_at.asc())
+            .all()
+        )
         return messages
     except Exception as e:
         raise e
@@ -254,8 +240,11 @@ def get_chat_history(thread_id: str, user_id: int):
 def delete_conversation(thread_id: str, user_id: int) -> bool:
     session = SessionLocal()
     try:
-        conversation = (session.query(Conversation)
-                        .filter_by(thread_id=thread_id, user_id=user_id).first())
+        conversation = (
+            session.query(Conversation)
+            .filter_by(thread_id=thread_id, user_id=user_id)
+            .first()
+        )
         if conversation is None:
             return False
         session.delete(conversation)
@@ -266,3 +255,9 @@ def delete_conversation(thread_id: str, user_id: int) -> bool:
         raise
     finally:
         session.close()
+
+
+if __name__ == "__main__":
+    with engine.connect() as connection:
+        connection.execute(text("SELECT 1"))
+    print("Database connection OK")

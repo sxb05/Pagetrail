@@ -1,8 +1,15 @@
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.core.paths import REPO_ROOT
+
+
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=(str(REPO_ROOT / ".env"), ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     DATABASE_URL: str | None = Field(default=None)
     DATABASE_HOST: str

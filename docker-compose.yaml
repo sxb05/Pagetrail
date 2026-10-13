@@ -6,6 +6,8 @@ services:
     container_name: pagetrail_app
     env_file:
       - .env
+    environment:
+      PYTHONPATH: /app/backend
     ports:
       - "8000:8000"
     depends_on:

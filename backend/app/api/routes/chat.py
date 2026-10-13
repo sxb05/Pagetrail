@@ -4,90 +4,30 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-import uvicorn
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
-from sqlalchemy.exc import SQLAlchemyError
 
-from agent import get_agent
-from auth import CurrentUser, router as auth_router
-from db import (
+from app.api.routes.auth import CurrentUser
+from app.core.paths import UPLOAD_DIR
+from app.db.session import (
     conversation_belongs_to_user,
     create_update_convo,
     delete_conversation,
     get_chat_history,
-    init_db,
     list_conversations,
     save_chat_message,
 )
-from rag import (
-    add_document_to_vector_store,
-    retrieve_documents,
-    init_rag_db,
-)
-from tools import set_current_thid
+from app.services.agent import get_agent
+from app.services.rag import add_document_to_vector_store, retrieve_documents
+from app.services.tools import set_current_thid
 
 logger = logging.getLogger(__name__)
 
+router = APIRouter(tags=["chat"])
 
-import os
-
-cors_origins = [
-    origin.strip()
-    for origin in os.getenv(
-        "CORS_ORIGINS",
-        "http://localhost:5173,http://127.0.0.1:5173",
-    ).split(",")
-    if origin.strip()
-]
-
-app = FastAPI(title="PageTrail")
-app.include_router(auth_router)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-FRONTEND = Path(__file__).parent / "frontend" / "dist"
-BRAND_ICON = Path(__file__).parent / "frontend" / "pagetrail-icon.png"
-UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 MAX_UPLOAD_SIZE = 10 * 1024 * 1024
 
-
-@app.exception_handler(SQLAlchemyError)
-async def sqlalchemy_error_handler(_request: Request, exc: SQLAlchemyError) -> JSONResponse:
-    logger.exception("Database error", exc_info=exc)
-    return JSONResponse(
-        status_code=503,
-        content={"detail": "The database is temporarily unavailable. Please try again."},
-    )
-
-
-@app.on_event("startup")
-def startup() -> None:
-    # Create the RAG table before init_db enables RLS on it.
-    init_rag_db()
-    init_db()
-
-    
-@app.get("/")
-async def root_to_login():
-    return RedirectResponse(url="/login")
-
-def user_login() -> dict[str, str]:
-    return {"message": "Login endpoint placeholder"} 
-@app.get("/api/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
 
 class ChatRequest(BaseModel):
     thread_id: str
@@ -143,7 +83,7 @@ def last_assistant_text(messages: list[Any]) -> str:
     return "I was unable to produce a response. Please try again."
 
 
-@app.get("/api/conversations")
+@router.get("/api/conversations")
 def conversations(current_user: CurrentUser) -> list[dict[str, str]]:
     return [
         {
@@ -155,14 +95,14 @@ def conversations(current_user: CurrentUser) -> list[dict[str, str]]:
     ]
 
 
-@app.post("/api/conversations")
+@router.post("/api/conversations")
 def new_conversation(current_user: CurrentUser) -> dict[str, str]:
     thread_id = str(uuid.uuid4())
     create_update_convo(thread_id, current_user.id, "", "New conversation")
     return {"thread_id": thread_id, "name": "New conversation"}
 
 
-@app.get("/api/conversations/{thread_id}/messages")
+@router.get("/api/conversations/{thread_id}/messages")
 def history(thread_id: str, current_user: CurrentUser) -> list[dict[str, str]]:
     return [
         {"role": message.role, "content": message.content}
@@ -170,14 +110,14 @@ def history(thread_id: str, current_user: CurrentUser) -> list[dict[str, str]]:
     ]
 
 
-@app.delete("/api/conversations/{thread_id}")
+@router.delete("/api/conversations/{thread_id}")
 def remove_conversation(thread_id: str, current_user: CurrentUser) -> dict[str, bool]:
     if not delete_conversation(thread_id, current_user.id):
         raise HTTPException(status_code=404, detail="Conversation not found.")
     return {"deleted": True}
 
 
-@app.post("/api/chat")
+@router.post("/api/chat")
 def chat(request: ChatRequest, current_user: CurrentUser) -> dict[str, str]:
     if not create_update_convo(
         request.thread_id, current_user.id, request.message, request.message[:48]
@@ -217,7 +157,7 @@ def chat(request: ChatRequest, current_user: CurrentUser) -> dict[str, str]:
     return {"role": "assistant", "content": answer}
 
 
-@app.post("/api/conversations/{thread_id}/files")
+@router.post("/api/conversations/{thread_id}/files")
 async def upload_file(
     thread_id: str, current_user: CurrentUser, file: UploadFile = File(...)
 ) -> dict[str, Any]:
@@ -253,43 +193,3 @@ async def upload_file(
     finally:
         destination.unlink(missing_ok=True)
         await file.close()
-
-
-def _frontend_file(path: str) -> Path | None:
-    root = FRONTEND.resolve()
-    requested = (root / path).resolve()
-    if requested != root and root not in requested.parents:
-        return None
-    return requested if requested.is_file() else None
-
-
-@app.get("/pagetrail-icon.png", include_in_schema=False)
-@app.get("/favicon.png", include_in_schema=False)
-def brand_icon(request: Request) -> FileResponse:
-    name = Path(request.url.path).name
-    for candidate in (
-        FRONTEND / name,
-        Path(__file__).parent / "frontend" / "public" / name,
-        Path(__file__).parent / "frontend" / name,
-        BRAND_ICON,
-    ):
-        if candidate.is_file():
-            return FileResponse(candidate, media_type="image/png")
-    raise HTTPException(status_code=404, detail="Icon not found.")
-
-
-if FRONTEND.exists():
-    assets = FRONTEND / "assets"
-    if assets.is_dir():
-        app.mount("/assets", StaticFiles(directory=assets), name="assets")
-
-    @app.get("/{path:path}", include_in_schema=False)
-    def frontend(path: str) -> FileResponse:
-        requested = _frontend_file(path)
-        if requested is not None:
-            return FileResponse(requested)
-        return FileResponse(FRONTEND / "index.html")
-
-
-if __name__ == "__main__":
-    uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)

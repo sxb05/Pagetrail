@@ -1,34 +1,25 @@
 import os
-from db import database_url
-from pathlib import Path
-from dotenv import load_dotenv
-from langchain_core.prompts import PromptTemplate, ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
-from langchain_core.messages import SystemMessage, HumanMessage
-from langchain_tavily import TavilySearch
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langgraph.graph import StateGraph, START, END, MessagesState
-from langgraph.prebuilt import ToolNode, tools_condition
-import sqlite3
-from tools import tools
 
+from langchain_core.messages import SystemMessage
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.checkpoint.postgres import PostgresSaver
-from langgraph.prebuilt import tools_condition
-from langgraph.graph import StateGraph, START
+from langgraph.graph import START, MessagesState, StateGraph
+from langgraph.prebuilt import ToolNode, tools_condition
 from psycopg.conninfo import make_conninfo
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
+from app.core.paths import DATA_DIR
+from app.db.session import database_url
+from app.services.tools import tools
 
-load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-
-Path("data").mkdir(exist_ok = True)
+DATA_DIR.mkdir(exist_ok=True)
 
 DEFAULT_MODEL = "gemini-3.1-flash-lite"
 
-ALLOWED_MODELS = ["gemini-3.8", "gemini-3.5","gemini-2.5-flash", "gemini-3.1-flash-lite"]
-
+ALLOWED_MODELS = ["gemini-3.8", "gemini-3.5", "gemini-2.5-flash", "gemini-3.1-flash-lite"]
 
 
 def normalize_model_name(model_name: str) -> str:
@@ -44,12 +35,13 @@ def normalize_model_name(model_name: str) -> str:
     except Exception:
         raise ValueError(f"Unsupported model name: {model_name}. or Model hit Limit. Please Try after sometime.")
 
+
 def build_agent(model_name: str):
     selected_model = normalize_model_name(model_name)
 
     llm = ChatGoogleGenerativeAI(
             model=selected_model,
-            google_api_key = GEMINI_API_KEY,
+            google_api_key=GEMINI_API_KEY,
             temperature=0.2,
             max_retries=3,
         )
@@ -228,16 +220,13 @@ def build_agent(model_name: str):
 
         Optimize for usefulness, truthfulness, clarity, and user agency.
         The best answer is not necessarily the longest answer. Give the user the amount of information needed to accomplish their goal effectively."""
-        
-        
+
+
     llm_tools = llm.bind_tools(tools)
-
-
 
     def chatnode(state: MessagesState):
         messages = [SystemMessage(content=SYSTEM_PROMPT)] + state["messages"]
         response = llm_tools.invoke(messages)
-
 
         return {
                 "messages": [response]
@@ -291,6 +280,7 @@ def get_checkpointer() -> PostgresSaver:
         _checkpointer = PostgresSaver(_checkpoint_pool)
         _checkpointer.setup()
     return _checkpointer
+
 
 def get_agent(model_name: str):
 
