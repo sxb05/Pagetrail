@@ -1,6 +1,6 @@
 # PageTrail
 
-<<<<<<< HEAD
+
 Document-aware chat with retrieval, web search, and long-term memory.
 
 **Live demo:** [https://pagetrail.onrender.com](https://pagetrail.onrender.com)
@@ -614,7 +614,6 @@ The project explores how an AI application can combine language models with retr
 
 If you find PageTrail interesting, try the live demo or explore the source code.
 
-<<<<<<< HEAD
 - Do not commit `.env`.
 - Do not expose `SUPABASE_SECRET_KEY` in frontend code.
 - Rotate database and API credentials if they have been shared publicly.
