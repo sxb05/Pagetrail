@@ -63,7 +63,7 @@ The application supports user authentication, conversation history, document ret
 - **Optional Redis:** Provide a supporting service for workflows that require it.
 - **Cloud deployment:** Access the deployed application through Render.
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Layer | Technology |
 |---|---|
@@ -86,7 +86,7 @@ The application does **not** require the PostgreSQL `vector` extension.
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```mermaid
 flowchart TD
@@ -126,7 +126,7 @@ The exact tools used depend on the question and the application's configured wor
 
 ---
 
-## 📋 Requirements
+## Requirements
 
 Before running PageTrail locally, make sure you have:
 
@@ -141,7 +141,7 @@ Redis is optional unless required by the functionality you are running.
 
 ---
 
-## 🚀 Installation
+## Installation
 
 ### 1. Clone the repository
 
@@ -187,7 +187,7 @@ npm --prefix .\frontend install
 
 ---
 
-## 🔐 Environment Configuration
+## Environment Configuration
 
 Create a `.env` file in the repository root. **Never commit this file to GitHub.**
 
@@ -351,7 +351,7 @@ The production frontend is generated in `frontend/dist`. When that directory exi
 
 ---
 
-## 📚 Document RAG Workflow
+## Document RAG Workflow
 
 PageTrail supports document-based question answering through a retrieval pipeline.
 
@@ -443,7 +443,7 @@ Keep production credentials in Render's environment-variable settings rather tha
 
 ---
 
-## 🔮 Future Improvements
+## Future Improvements
 
 Potential directions for further development include:
 
