@@ -31,7 +31,8 @@ rag_documents = Table(
     Column("source", String(255), nullable=False),
     Column("embedding", Text, nullable=False),
 )
-metadata.create_all(bind=engine)
+def init_rag_db() -> None:
+    metadata.create_all(bind=engine)
 
 
 def read_pdf(file_path: str) -> str:

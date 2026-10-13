@@ -23,20 +23,38 @@ from db import (
     list_conversations,
     save_chat_message,
 )
-from rag import add_document_to_vector_store, retrieve_documents
+from rag import (
+    add_document_to_vector_store,
+    retrieve_documents,
+    init_rag_db,
+)
 from tools import set_current_thid
 
 logger = logging.getLogger(__name__)
 
+
+import os
+
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173",
+    ).split(",")
+    if origin.strip()
+]
+
 app = FastAPI(title="PageTrail")
 app.include_router(auth_router)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 FRONTEND = Path(__file__).parent / "frontend" / "dist"
 BRAND_ICON = Path(__file__).parent / "frontend" / "pagetrail-icon.png"
@@ -56,6 +74,8 @@ async def sqlalchemy_error_handler(_request: Request, exc: SQLAlchemyError) -> J
 
 @app.on_event("startup")
 def startup() -> None:
+    # Create the RAG table before init_db enables RLS on it.
+    init_rag_db()
     init_db()
 
     
