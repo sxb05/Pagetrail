@@ -169,7 +169,6 @@ flowchart TD
 The exact tools used depend on the question and the application's configured workflow.
 
 ---
->>>>>>> 6dd1620a52474d35c088046b83395927a3f7f17e
 
 ## Requirements
 
@@ -192,7 +191,6 @@ Redis is optional unless required by the functionality you are running.
 **Supabase Dashboard → Project Settings → Database → Connection string → URI → Session pooler**
 =======
 ### 1. Clone the repository
->>>>>>> 6dd1620a52474d35c088046b83395927a3f7f17e
 
 ```bash
 git clone https://github.com/sxb05/Pagetrail.git
@@ -283,7 +281,8 @@ For a hosted deployment (for example Render), set the same variables in the serv
 | `SECRET_KEY` | Application signing secret, where used |
 | `ALGORITHM` | Token signing algorithm, where used |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Token expiration configuration, where used |
->>>>>>> 6dd1620a52474d35c088046b83395927a3f7f17e
+
+
 
 The legacy database variables remain supported as a local PostgreSQL fallback:
 
@@ -301,7 +300,7 @@ DATABASE_PORT=5432
 DATABASE_NAME=your_database
 DATABASE_USERNAME=your_username
 DATABASE_PASSWORD=your_password
->>>>>>> 6dd1620a52474d35c088046b83395927a3f7f17e
+
 ```
 
 Use `DATABASE_URL` when connecting to Supabase.
@@ -314,9 +313,8 @@ If the database password contains special characters, copy the connection URI di
 Row-level security is enabled on all public application tables. The FastAPI backend connects using the database URL and performs application authorization checks.
 =======
 ---
->>>>>>> 6dd1620a52474d35c088046b83395927a3f7f17e
 
-## 🗄️ Database Setup
+## Database Setup
 
 <<<<<<< HEAD
 ### Docker
@@ -360,7 +358,7 @@ The expected services are:
 Ensure the root `.env` file exists before starting the application.
 
 Build and start the services:
->>>>>>> 6dd1620a52474d35c088046b83395927a3f7f17e
+
 
 ```powershell
 docker compose up --build -d
@@ -375,8 +373,6 @@ Open the application:
 **http://localhost:8000**
 
 Stop the containers:
->>>>>>> 6dd1620a52474d35c088046b83395927a3f7f17e
-
 ```powershell
 docker compose down
 ```
@@ -385,7 +381,7 @@ docker compose down
 The database remains in Supabase when containers are stopped. Do not add a local PostgreSQL container unless you want a separate database from Supabase.
 =======
 Stopping the containers does not delete data stored in Supabase PostgreSQL.
->>>>>>> 6dd1620a52474d35c088046b83395927a3f7f17e
+
 
 You do not need a local PostgreSQL container when using the configured Supabase database.
 
@@ -399,7 +395,6 @@ Start Redis if it is needed:
 ### Start Redis (optional)
 
 If Redis is required by your development workflow:
->>>>>>> 6dd1620a52474d35c088046b83395927a3f7f17e
 
 ```powershell
 docker compose up -d redis
@@ -411,8 +406,6 @@ Backend:
 ### Start the backend
 
 From the repository root:
->>>>>>> 6dd1620a52474d35c088046b83395927a3f7f17e
-
 ```powershell
 conda activate multi-agents
 uvicorn app.main:app --reload --app-dir backend
@@ -428,7 +421,6 @@ The backend will be available at:
 ### Start the frontend
 
 Open a separate terminal and run:
->>>>>>> 6dd1620a52474d35c088046b83395927a3f7f17e
 
 ```powershell
 npm --prefix .\frontend run dev
@@ -444,7 +436,7 @@ The Vite development server will typically be available at:
 **http://localhost:5173**
 
 ### Build the production frontend
->>>>>>> 6dd1620a52474d35c088046b83395927a3f7f17e
+
 
 ```powershell
 npm --prefix .\frontend run build
@@ -465,7 +457,7 @@ The production frontend is generated in `frontend/dist`. When that directory exi
 ## Document RAG Workflow
 
 PageTrail supports document-based question answering through a retrieval pipeline.
->>>>>>> 6dd1620a52474d35c088046b83395927a3f7f17e
+
 
 1. Select a PDF, DOCX, TXT, or Markdown file in the chat composer.
 2. The selected file is staged locally rather than immediately uploaded.
@@ -500,7 +492,7 @@ GET https://pagetrail.onrender.com/api/health
 ```
 
 ### Check database connectivity
->>>>>>> 6dd1620a52474d35c088046b83395927a3f7f17e
+
 
 ```text
 GET https://pagetrail.onrender.com/api/health
@@ -518,7 +510,7 @@ Run that command from the `backend` directory so Python can import the `app` pac
 Frontend build:
 =======
 ### Verify the frontend build
->>>>>>> 6dd1620a52474d35c088046b83395927a3f7f17e
+
 
 ```powershell
 npm --prefix .\frontend run build
@@ -619,4 +611,4 @@ If you find PageTrail interesting, try the live demo or explore the source code.
 - Rotate database and API credentials if they have been shared publicly.
 - Use the Supabase Session Pooler URI when the direct database hostname cannot be resolved by the local network.
 =======
->>>>>>> 6dd1620a52474d35c088046b83395927a3f7f17e
+
