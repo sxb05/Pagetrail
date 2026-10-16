@@ -3,7 +3,7 @@ import math
 from pathlib import Path
 from typing import List
 from uuid import uuid4
-
+from functools import lru_cache
 import docx2txt
 from langchain_core.documents import Document
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
@@ -12,20 +12,17 @@ from pypdf import PdfReader
 from sqlalchemy import Column, MetaData, String, Table, Text, insert, select
 from pgvector.sqlalchemy import Vector
 # from app.core.paths import UPLOAD_DIR
-from app.db.session import engine
+from app.db.session import admin_engine, engine
+from app.db.models import Conversation
 
 # UPLOAD_DIR.mkdir(exist_ok=True)
 
-embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
+@lru_cache(maxsize=1)
+def _get_embeddings() -> GoogleGenerativeAIEmbeddings:
+    return GoogleGenerativeAIEmbeddings(
+        model="gemini-embedding-001"
+    )
 
-
-# Generate a sample embedding first
-sample_vector = embeddings.embed_query("test text")
-
-# Now check the dimension of that vector
-print("Embedding dimension:", len(sample_vector))
-
-print("Embedding type:", type(embeddings))
 EMBEDDING_DIM = 3072
 
 metadata = MetaData()
@@ -40,9 +37,8 @@ rag_documents = Table(
     Column("embedding_vector", Vector(EMBEDDING_DIM), nullable=True),
 )
 
-
 def init_rag_db() -> None:
-    metadata.create_all(bind=engine)
+    metadata.create_all(bind=admin_engine)
 
 
 def read_pdf(file_path: str) -> str:
@@ -81,7 +77,7 @@ def add_document_to_vector_store(file_path: str, thread_id: str):
         for chunk in chunks
     ]
 
-    vectors = embeddings.embed_documents(
+    vectors = _get_embeddings().embed_documents(
     [document.page_content for document in documents]
 )
 
@@ -118,12 +114,11 @@ def _cosine_similarity(first: List[float], second: List[float]) -> float:
     return numerator / (first_norm * second_norm)
 
 
-def retrieve_documents(query: str, thread_id: str, k: int = 5):
+def retrieve_documents(query: str, thread_id: str ,user_id: int, k: int = 5):
     """
     Retrieve the top-k relevant document chunks using pgvector.
     """
-    query_vector = embeddings.embed_query(query)
-
+    query_vector = _get_embeddings().embed_query(query)
     if len(query_vector) != EMBEDDING_DIM:
         raise ValueError(
             f"Expected {EMBEDDING_DIM} dimensions, "
@@ -133,6 +128,7 @@ def retrieve_documents(query: str, thread_id: str, k: int = 5):
     distance = rag_documents.c.embedding_vector.cosine_distance(
         query_vector
     ).label("distance")
+    conversations = Conversation.__table__
 
     statement = (
         select(
@@ -140,8 +136,15 @@ def retrieve_documents(query: str, thread_id: str, k: int = 5):
             rag_documents.c.source,
             distance,
         )
+        .select_from(
+            rag_documents.join(
+                conversations,
+                rag_documents.c.thread_id == conversations.c.thread_id,
+            )
+        )
         .where(
             rag_documents.c.thread_id == thread_id,
+            conversations.c.user_id == user_id,
             rag_documents.c.embedding_vector.is_not(None),
         )
         .order_by(distance)
@@ -149,21 +152,18 @@ def retrieve_documents(query: str, thread_id: str, k: int = 5):
     )
 
     with engine.connect() as connection:
-        ranked_rows = connection.execute(
-            statement
-        ).mappings().all()
+        ranked_rows = connection.execute(statement).mappings().all()
+        if not ranked_rows:
+            return "No relevant documents found."
 
-    if not ranked_rows:
-        return "No relevant documents found."
-
-    return [
-        {
-            "chunk_index": index,
-            "content": row["content"],
-            "metadata": {
-                "thread_id": thread_id,
-                "source": row["source"],
-            },
-        }
-        for index, row in enumerate(ranked_rows, start=1)
-    ]
+        return [
+            {
+                "chunk_index": index,
+                "content": row["content"],
+                "metadata": {
+                    "thread_id": thread_id,
+                    "source": row["source"],
+                },
+            }
+            for index, row in enumerate(ranked_rows, start=1)
+        ]

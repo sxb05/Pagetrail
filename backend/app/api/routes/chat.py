@@ -19,7 +19,6 @@ from app.db.session import (
 )
 from app.services.agent import get_agent
 from app.services.rag import add_document_to_vector_store, retrieve_documents
-from app.services.tools import set_current_thid
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +57,9 @@ def message_content(message: Any) -> str:
 
 def clean_llm_output(text: str) -> str:
     cleaned = text.replace("\r\n", "\n").strip()
-    cleaned = re.sub(r"<think(?:ing)?>[\s\S]*?</think(?:ing)?>", "", cleaned, flags=re.I)
+    cleaned = re.sub(
+        r"<think(?:ing)?>[\s\S]*?</think(?:ing)?>", "", cleaned, flags=re.I
+    )
     cleaned = re.sub(r"</?think(?:ing)?>", "", cleaned, flags=re.I)
     fenced = re.fullmatch(r"```(?:markdown|md|text)?\s*\n([\s\S]*?)\n```", cleaned)
     if fenced:
@@ -71,6 +72,10 @@ def clean_llm_output(text: str) -> str:
     )
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
+
+
+def build_checkpoint_thread_id(user_id: int, conversation_thread_id: str) -> str:
+    return f"user:{user_id}:conversation:{conversation_thread_id}"
 
 
 def last_assistant_text(messages: list[Any]) -> str:
@@ -123,11 +128,13 @@ def chat(request: ChatRequest, current_user: CurrentUser) -> dict[str, str]:
         request.thread_id, current_user.id, request.message, request.message[:48]
     ):
         raise HTTPException(status_code=404, detail="Conversation not found.")
-    set_current_thid(request.thread_id)
+
     save_chat_message(request.thread_id, current_user.id, "user", request.message)
 
     try:
-        document_context = retrieve_documents(request.message, request.thread_id, k=5)
+        document_context = retrieve_documents(
+            request.message, request.thread_id, current_user.id, k=5
+        )
         prompt = request.message
         if isinstance(document_context, list):
             context_text = "\n\n".join(
@@ -141,9 +148,21 @@ def chat(request: ChatRequest, current_user: CurrentUser) -> dict[str, str]:
                 f"{context_text}\n\nUser request: {request.message}"
             )
         agent = get_agent(request.model)
+
+        checkpoint_thread_id = build_checkpoint_thread_id(
+            current_user.id,
+            request.thread_id,
+        )
+
         result = agent.invoke(
             {"messages": [{"role": "user", "content": prompt}]},
-            config={"configurable": {"thread_id": request.thread_id}},
+            config={
+                "configurable": {
+                    "thread_id": checkpoint_thread_id,
+                    "conversation_thread_id": request.thread_id,
+                    "user_id": current_user.id,
+                }
+            },
         )
         answer = last_assistant_text(result["messages"])
     except Exception:
@@ -166,7 +185,9 @@ async def upload_file(
 
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in {".pdf", ".docx", ".txt", ".md"}:
-        raise HTTPException(status_code=400, detail="Upload a PDF, DOCX, TXT, or MD file.")
+        raise HTTPException(
+            status_code=400, detail="Upload a PDF, DOCX, TXT, or MD file."
+        )
 
     destination = UPLOAD_DIR / f"{uuid.uuid4()}{suffix}"
     try:

@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     )
 
     DATABASE_URL: str | None = Field(default=None)
+    DATABASE_ADMIN_URL: str | None = Field(default=None)
     DATABASE_HOST: str
     DATABASE_PORT: str
     DATABASE_NAME: str

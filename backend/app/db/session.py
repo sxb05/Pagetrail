@@ -31,18 +31,53 @@ def _database_url() -> URL:
     )
 
 
+
 database_url = _database_url()
 
-connect_args: dict = {}
-if database_url.host and database_url.host != "localhost":
-    connect_args["sslmode"] = "require"
+
+def _database_admin_url() -> URL:
+    if not settings.DATABASE_ADMIN_URL:
+        # Temporary compatibility fallback. This does not separate roles
+        # until DATABASE_ADMIN_URL is configured.
+        return database_url
+
+    admin_value = settings.DATABASE_ADMIN_URL.strip()
+    if not _looks_like_database_url(admin_value):
+        raise ValueError(
+            "DATABASE_ADMIN_URL must be a valid PostgreSQL URL."
+        )
+
+    return make_url(admin_value).set(drivername="postgresql+psycopg")
+
+
+def _connect_args_for(url: URL) -> dict:
+    if url.host and url.host != "localhost":
+        return {"sslmode": "require"}
+    return {}
+
+
+admin_database_url = _database_admin_url()
+
+# Ordinary application queries use this engine.
 engine = create_engine(
     database_url,
     pool_pre_ping=True,
-    connect_args=connect_args,
+    connect_args=_connect_args_for(database_url),
 )
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Schema initialization and migrations use this engine.
+admin_engine = create_engine(
+    admin_database_url,
+    pool_pre_ping=True,
+    connect_args=_connect_args_for(admin_database_url),
+)
+
+SessionLocal = sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine,
+)
+
 
 
 def get_db():
@@ -66,7 +101,7 @@ def init_db():
         "chat_messages": "user_id",
         "long_term_memory": "user_id",
     }
-    with engine.begin() as connection:
+    with admin_engine.begin() as connection:
         # Keep schema initialization and inspection on one connection and give
         # remote PostgreSQL metadata queries enough time to complete.
         connection.exec_driver_sql("SET LOCAL statement_timeout = '30s'")
@@ -165,58 +200,56 @@ def save_chat_message(thread_id: str, user_id: int, role: str, content: str) -> 
         session.close()
 
 
-def save_memory(thread_id: str, content: str):
+def save_memory(thread_id: str, user_id: int, content: str):
     session = SessionLocal()
-    print("🔥 SAVE MEMORY TOOL CALLED:", content)
     try:
         conversation = (
             session.query(Conversation)
-            .filter_by(thread_id=thread_id)
+            .filter(
+                Conversation.thread_id == thread_id,
+                Conversation.user_id == user_id,
+            )
             .first()
         )
 
-        if not conversation:
-            raise ValueError(
-                f"Conversation with thread_id '{thread_id}' does not exist"
-            )
+        if conversation is None:
+            raise ValueError("Conversation not found or access denied.")
 
         memory = LongTermMemory(
             thread_id=thread_id,
-            user_id=conversation.user_id,
-            content=content
+            user_id=user_id,
+            content=content,
         )
 
         session.add(memory)
-
         conversation.updated_at = datetime.utcnow().isoformat()
-
         session.commit()
 
     except Exception:
         session.rollback()
         raise
-
     finally:
         session.close()
 
-
-def search_memory(thread_id: str, query: str):
+def search_memory(thread_id: str, user_id: int, query: str):
     session = SessionLocal()
     try:
         memories = (
             session.query(LongTermMemory)
             .filter(
                 LongTermMemory.thread_id == thread_id,
+                LongTermMemory.user_id == user_id,
                 LongTermMemory.content.contains(query),
             )
             .all()
         )
         return memories
-    except Exception as e:
-        raise e
+
+    except Exception:
+        session.rollback()
+        raise
     finally:
         session.close()
-
 
 def get_chat_history(thread_id: str, user_id: int):
     session = SessionLocal()

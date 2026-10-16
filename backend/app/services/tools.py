@@ -1,64 +1,70 @@
-from langchain_core.tools import tool
-from langchain_tavily import TavilySearch
 
+from langchain_tavily import TavilySearch
+from langchain_core.tools import tool
+from langgraph.prebuilt import ToolRuntime
 from app.db.session import save_memory, search_memory
 from app.services.rag import retrieve_documents
 
 TAVILY_API_KEY = "TAVILY_API_KEY"
 
-CURRENT_THID = "default"
 
+def _get_request_identity(runtime: ToolRuntime) -> tuple[str, int]:
+    configurable = runtime.config.get("configurable", {})
 
-def set_current_thid(thid: str):
-    global CURRENT_THID
-    CURRENT_THID = thid
+    thread_id = configurable.get("conversation_thread_id")
+    user_id = configurable.get("user_id")
+
+    if not isinstance(thread_id, str) or not thread_id:
+        raise ValueError("Missing conversation context.")
+
+    if isinstance(user_id, bool) or not isinstance(user_id, int):
+        raise ValueError("Missing authenticated user context.")
+
+    return thread_id, user_id
 
 
 @tool
 def web_search(query: str, num_results: int = 5):
-    """
-    Perform a web search using Tavily and return the top results.
-    """
+    """Perform a web search using Tavily and return the top results."""
     tavily = TavilySearch(api_key=TAVILY_API_KEY)
-    results = tavily.search(query, num_results=num_results)
-    return results
+    return tavily.search(query, num_results=num_results)
 
 
 @tool
-def save_memory_tool(content: str):
-    """
-    You are a helpful AI assistant with long-term memory.
-
-    When the user explicitly tells you something useful to remember
-    for future conversations, call save_memory_tool.
-
-    Examples:
-    - "My name is Subash" -> save it
-    - "I am building a LangGraph RAG application" -> save it
-    - "I prefer Python" -> save it
-
-    Do not save temporary questions or one-time requests.
-    """
-    save_memory(CURRENT_THID, content)
-    return f"Memory saved: {content}"
+def save_memory_tool(content: str, runtime: ToolRuntime):
+    """Save a useful memory for the authenticated user's conversation."""
+    thread_id, user_id = _get_request_identity(runtime)
+    save_memory(thread_id, user_id, content)
+    return "Memory saved successfully."
 
 
 @tool
-def search_memory_tool(query: str):
-    """
-    Search for memories in the database.
-    """
-    results = search_memory(CURRENT_THID, query)
-    return results
+def search_memory_tool(query: str, runtime: ToolRuntime):
+    """Search memories belonging to the authenticated user's conversation."""
+    thread_id, user_id = _get_request_identity(runtime)
+    return search_memory(thread_id, user_id, query)
 
 
 @tool
-def search_uploaded_documents(query: str, k: int = 5):
-    """
-    Search for uploaded documents in the vector store.
-    """
-    results = retrieve_documents(query, CURRENT_THID, k)
-    return results
+def search_uploaded_documents(
+    query: str,
+    runtime: ToolRuntime,
+    k: int = 5,
+):
+    """Search uploaded documents belonging to the authenticated conversation."""
+    thread_id, user_id = _get_request_identity(runtime)
+
+    return retrieve_documents(
+        query,
+        thread_id,
+        user_id,
+        k=k,
+    )
 
 
-tools = [save_memory_tool, search_memory_tool, search_uploaded_documents, web_search]
+tools = [
+    save_memory_tool,
+    search_memory_tool,
+    search_uploaded_documents,
+    web_search,
+]

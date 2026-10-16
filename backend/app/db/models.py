@@ -42,7 +42,6 @@ class ChatMessage(Base):
 
     conversation = relationship("Conversation", back_populates="messages")
 
-
 class LongTermMemory(Base):
     __tablename__ = "long_term_memory"
 
