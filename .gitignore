@@ -1,6 +1,10 @@
 .env
+.venv/
 node_modules/
-
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
 frontend/node_modules/
 frontend/dist/
 frontend/*.tsbuildinfo
