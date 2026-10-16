@@ -1,6 +1,6 @@
 from sqlalchemy import Column, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
-
+from pgvector.sqlalchemy import Vector
 from app.db.base import Base, utcnow_iso
 
 

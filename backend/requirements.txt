@@ -22,6 +22,7 @@ langchainhub==0.1.21
 SQLAlchemy==2.0.52
 langgraph-checkpoint-postgres
 psycopg[binary]
+pgvector
 
 # Document Parsing & Storage
 pypdf
