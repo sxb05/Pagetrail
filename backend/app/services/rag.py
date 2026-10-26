@@ -105,13 +105,13 @@ def add_document_to_vector_store(file_path: str, thread_id: str):
     return {"filename": Path(file_path).name, "num_chunks": len(chunks)}
 
 
-def _cosine_similarity(first: List[float], second: List[float]) -> float:
-    numerator = sum(left * right for left, right in zip(first, second))
-    first_norm = math.sqrt(sum(value * value for value in first))
-    second_norm = math.sqrt(sum(value * value for value in second))
-    if not first_norm or not second_norm:
-        return 0.0
-    return numerator / (first_norm * second_norm)
+# def _cosine_similarity(first: List[float], second: List[float]) -> float:
+#     numerator = sum(left * right for left, right in zip(first, second))
+#     first_norm = math.sqrt(sum(value * value for value in first))
+#     second_norm = math.sqrt(sum(value * value for value in second))
+#     if not first_norm or not second_norm:
+#         return 0.0
+#     return numerator / (first_norm * second_norm)
 
 
 def retrieve_documents(query: str, thread_id: str ,user_id: int, k: int = 5):

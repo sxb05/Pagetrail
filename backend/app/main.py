@@ -15,6 +15,18 @@ from app.api.routes.health import router as health_router
 from app.core.paths import BRAND_ICON, FRONTEND_DIST, FRONTEND_DIR, FRONTEND_PUBLIC
 from app.db.session import init_db
 from app.services.rag import init_rag_db
+from dotenv import load_dotenv
+
+# Find the project root, where .env is stored
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+# Load environment variables from the root .env
+load_dotenv(PROJECT_ROOT / ".env")
+
+
+
+
+
 
 logger = logging.getLogger(__name__)
 

@@ -1,0 +1,1 @@
+{"USE_GEMINI_MODEL": "YES", "GEMINI_MODEL_NAME": "geminigemini-2.5-flash", "eval_mode": "llm"}

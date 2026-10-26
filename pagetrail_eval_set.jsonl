@@ -1,0 +1,50 @@
+{"id": "q01", "category": "paraphrase", "question": "What should a client do when its login credential has lapsed?", "required_snippets": ["/v2/token/refresh"]}
+{"id": "q02", "category": "paraphrase", "question": "How long until a locked-out user can try again?", "required_snippets": ["clears automatically after 30 minutes"]}
+{"id": "q03", "category": "paraphrase", "question": "How many calls can a free account make per minute?", "required_snippets": ["60 requests per minute"]}
+{"id": "q04", "category": "paraphrase", "question": "How quickly does the system switch to a standby database if the main one dies?", "required_snippets": ["completes within 45 seconds"]}
+{"id": "q05", "category": "paraphrase", "question": "How long are database backups kept?", "required_snippets": ["kept for 35 days"]}
+{"id": "q06", "category": "paraphrase", "question": "After how long do cached items expire by default?", "required_snippets": ["default time-to-live is 900 seconds"]}
+{"id": "q07", "category": "paraphrase", "question": "How do we undo a bad release?", "required_snippets": ["orbitctl rollback --to-previous"]}
+{"id": "q08", "category": "paraphrase", "question": "When are we allowed to ship changes?", "required_snippets": ["Tuesday and Thursday from 14:00 to 16:00 IST"]}
+{"id": "q09", "category": "paraphrase", "question": "How fast must on-call respond to a complete outage?", "required_snippets": ["acknowledge SEV1 within 5 minutes"]}
+{"id": "q10", "category": "paraphrase", "question": "How often do customers get updates during the worst incidents?", "required_snippets": ["updated every 30 minutes"]}
+{"id": "q11", "category": "paraphrase", "question": "How long do we keep records of administrative actions?", "required_snippets": ["audit logs for 400 days"]}
+{"id": "q12", "category": "paraphrase", "question": "How big can a file I upload be?", "required_snippets": ["maximum upload size is 25 MB"]}
+{"id": "q13", "category": "paraphrase", "question": "What happens if a customer's webhook receiver is down?", "required_snippets": ["Orbiton retries 5 times"]}
+{"id": "q14", "category": "paraphrase", "question": "Which geographic locations can customer data live in?", "required_snippets": ["ap-south-1 (Mumbai), eu-west-1 (Ireland) and us-east-2 (Ohio)"]}
+{"id": "q15", "category": "paraphrase", "question": "How quickly will an Enterprise customer hear back from us?", "required_snippets": ["first-response SLA of 1 hour"]}
+{"id": "q16", "category": "exact_match", "question": "What does ERR_AUTH_4031 mean?", "required_snippets": ["ERR_AUTH_4031 means the token is valid but lacks the required scope"]}
+{"id": "q17", "category": "exact_match", "question": "ERR_RATE_429A", "required_snippets": ["ERR_RATE_429A together with the X-Orbiton-Retry-After header"]}
+{"id": "q18", "category": "exact_match", "question": "What triggers ERR_DB_5203?", "required_snippets": ["ERR_DB_5203 is raised when replication lag exceeds 30 seconds"]}
+{"id": "q19", "category": "exact_match", "question": "ERR_CACHE_7710 meaning", "required_snippets": ["ERR_CACHE_7710 signals a cache stampede"]}
+{"id": "q20", "category": "exact_match", "question": "What is ERR_BILL_6104?", "required_snippets": ["ERR_BILL_6104 means the payment method was declined"]}
+{"id": "q21", "category": "exact_match", "question": "Explain ERR_UPLOAD_3315", "required_snippets": ["ERR_UPLOAD_3315 means the virus scan failed"]}
+{"id": "q22", "category": "exact_match", "question": "ERR_HOOK_8801 cause", "required_snippets": ["ERR_HOOK_8801 means the receiving endpoint did not answer within 10 seconds"]}
+{"id": "q23", "category": "exact_match", "question": "What does ERR_AUTH_4090 indicate?", "required_snippets": ["ERR_AUTH_4090 means the account is locked"]}
+{"id": "q24", "category": "exact_match", "question": "What is the X-Orbiton-Retry-After header?", "required_snippets": ["X-Orbiton-Retry-After header"]}
+{"id": "q25", "category": "exact_match", "question": "Which header carries the webhook signature, X-Orbiton-Signature?", "required_snippets": ["X-Orbiton-Signature header"]}
+{"id": "q26", "category": "exact_match", "question": "What is the KMS alias orbiton-prod-key?", "required_snippets": ["KMS alias orbiton-prod-key"]}
+{"id": "q27", "category": "exact_match", "question": "What is stored in orbiton-uploads-prod?", "required_snippets": ["bucket orbiton-uploads-prod"]}
+{"id": "q28", "category": "exact_match", "question": "What is /v2/token/refresh used for?", "required_snippets": ["/v2/token/refresh"]}
+{"id": "q29", "category": "exact_match", "question": "Where is AES-256-GCM used?", "required_snippets": ["AES-256-GCM"]}
+{"id": "q30", "category": "exact_match", "question": "ERR_UPLOAD_3307", "required_snippets": ["ERR_UPLOAD_3307 means the file type is not supported"]}
+{"id": "q31", "category": "proper_noun", "question": "Who leads the Platform Reliability team?", "required_snippets": ["Priya Venkataraman"]}
+{"id": "q32", "category": "proper_noun", "question": "What is Kestrel?", "required_snippets": ["PostgreSQL 15 cluster named Kestrel"]}
+{"id": "q33", "category": "proper_noun", "question": "What is Merlin?", "required_snippets": ["read replica named Merlin"]}
+{"id": "q34", "category": "proper_noun", "question": "What is Falcon?", "required_snippets": ["Redis cluster named Falcon"]}
+{"id": "q35", "category": "proper_noun", "question": "Where is the Skyline dashboard hosted?", "required_snippets": ["Grafana under the name Skyline"]}
+{"id": "q36", "category": "proper_noun", "question": "What is the Lantern template?", "required_snippets": ["template named Lantern"]}
+{"id": "q37", "category": "proper_noun", "question": "What does ClamShield do?", "required_snippets": ["scanned by ClamShield"]}
+{"id": "q38", "category": "proper_noun", "question": "Who audited the SOC 2 report?", "required_snippets": ["Northgate Assurance"]}
+{"id": "q39", "category": "proper_noun", "question": "What is PagerBridge?", "required_snippets": ["pages are sent through the PagerBridge tool"]}
+{"id": "q40", "category": "proper_noun", "question": "What is #orbiton-ops for?", "required_snippets": ["#orbiton-ops"]}
+{"id": "q41", "category": "multi_chunk", "question": "How much does Pro cost and what is its rate limit?", "required_snippets": ["Pro plan costs $49 per month", "Pro tier allows 600 requests per minute"]}
+{"id": "q42", "category": "multi_chunk", "question": "In a SEV1 caused by DB failover, how long is failover and how fast must on-call acknowledge?", "required_snippets": ["Automatic failover completes within 45 seconds", "acknowledge SEV1 within 5 minutes"]}
+{"id": "q43", "category": "multi_chunk", "question": "Can I deploy on December 24, and how do I roll back if I do?", "required_snippets": ["change freeze applies from December 20 to January 3", "orbitctl rollback --to-previous"]}
+{"id": "q44", "category": "multi_chunk", "question": "A Pro customer in Ireland asks about support hours and data region.", "required_snippets": ["09:00 to 18:00 IST, Monday to Friday", "eu-west-1 (Ireland)"]}
+{"id": "q45", "category": "multi_chunk", "question": "How long are application logs kept versus database backups?", "required_snippets": ["retained for 90 days", "kept for 35 days"]}
+{"id": "q46", "category": "multi_chunk", "question": "What error rate triggers SEV2 and how long do we have for the postmortem?", "required_snippets": ["error rate above 2% for 5 minutes", "due within 5 business days"]}
+{"id": "q47", "category": "multi_chunk", "question": "Compare the max webhook payload size with the max upload size.", "required_snippets": ["at most 256 KB", "maximum upload size is 25 MB"]}
+{"id": "q48", "category": "multi_chunk", "question": "When is on-call handover and how fast must a SEV2 be acknowledged?", "required_snippets": ["every Monday at 10:00 IST", "SEV2 within 15 minutes"]}
+{"id": "q49", "category": "multi_chunk", "question": "Which error codes cover a cache stampede and replication lag?", "required_snippets": ["ERR_CACHE_7710 signals a cache stampede", "ERR_DB_5203 is raised when replication lag"]}
+{"id": "q50", "category": "multi_chunk", "question": "How many retries for declined payments versus failed webhook deliveries?", "required_snippets": ["the system retries 3 times over 7 days", "Orbiton retries 5 times"]}
