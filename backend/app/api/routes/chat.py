@@ -6,6 +6,7 @@ from typing import Any
 import json
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
+from sqlalchemy import delete, func, select
 
 
 from app.services.guardrails import (
@@ -21,12 +22,17 @@ from app.db.session import (
     conversation_belongs_to_user,
     create_update_convo,
     delete_conversation,
+    engine,
     get_chat_history,
     list_conversations,
     save_chat_message,
 )
 from app.services.agent import get_agent
-from app.services.rag import add_document_to_vector_store, retrieve_documents
+from app.services.rag import (
+    add_document_to_vector_store,
+    rag_documents,
+    retrieve_documents,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +176,7 @@ def chat(request: ChatRequest, current_user: CurrentUser) -> dict[str, str]:
             safe_message, request.thread_id, current_user.id, k=5
         )
         prompt = safe_message
-        answer= None
+        answer = None
         if isinstance(document_context, list):
             # Serialize the retrieved text as data, not as instructions.
             document_payload = [
@@ -263,6 +269,47 @@ def chat(request: ChatRequest, current_user: CurrentUser) -> dict[str, str]:
     return {"role": "assistant", "content": answer}
 
 
+@router.get("/api/conversations/{thread_id}/files")
+def list_files(thread_id: str, current_user: CurrentUser) -> list[dict[str, Any]]:
+    if not conversation_belongs_to_user(thread_id, current_user.id):
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+
+    statement = (
+        select(
+            rag_documents.c.source,
+            func.count(rag_documents.c.id).label("num_chunks"),
+        )
+        .where(rag_documents.c.thread_id == thread_id)
+        .group_by(rag_documents.c.source)
+    )
+
+    with engine.connect() as connection:
+        rows = connection.execute(statement).mappings().all()
+
+    return [
+        {"filename": row["source"], "num_chunks": row["num_chunks"]}
+        for row in rows
+    ]
+
+
+@router.delete("/api/conversations/{thread_id}/files/{filename}")
+def delete_file(
+    thread_id: str, filename: str, current_user: CurrentUser
+) -> dict[str, bool]:
+    if not conversation_belongs_to_user(thread_id, current_user.id):
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+
+    statement = delete(rag_documents).where(
+        rag_documents.c.thread_id == thread_id,
+        rag_documents.c.source == filename,
+    )
+
+    with engine.begin() as connection:
+        connection.execute(statement)
+
+    return {"deleted": True}
+
+
 @router.post("/api/conversations/{thread_id}/files")
 async def upload_file(
     thread_id: str, current_user: CurrentUser, file: UploadFile = File(...)
@@ -270,7 +317,8 @@ async def upload_file(
     if not conversation_belongs_to_user(thread_id, current_user.id):
         raise HTTPException(status_code=404, detail="Conversation not found.")
 
-    suffix = Path(file.filename or "").suffix.lower()
+    original_name = Path(file.filename or "uploaded_file").name
+    suffix = Path(original_name).suffix.lower()
     if suffix not in {".pdf", ".docx", ".txt", ".md"}:
         raise HTTPException(
             status_code=400, detail="Upload a PDF, DOCX, TXT, or MD file."
@@ -288,7 +336,10 @@ async def upload_file(
             )
 
         destination.write_bytes(contents)
-        result = add_document_to_vector_store(str(destination), thread_id)
+        result = add_document_to_vector_store(
+            str(destination), thread_id, original_filename=original_name
+        )
+        result["size"] = len(contents)
         return result
     except HTTPException:
         raise

@@ -7,9 +7,10 @@ import {
   Copy,
   FileText,
   LogOut,
-  Menu,
   MessageSquare,
   MoreHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
   Paperclip,
   Plus,
   Search,
@@ -20,6 +21,18 @@ import {
 
 type Conversation = { thread_id: string; name: string; updated_at?: string };
 type ChatMessage = { role: "user" | "assistant"; content: string };
+type UploadedDoc = {
+  filename: string;
+  num_chunks?: number;
+  size?: number;
+};
+
+function formatFileSize(bytes?: number): string {
+  if (bytes === undefined || bytes === null || isNaN(bytes)) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 function publicErrorMessage(detail: unknown, fallback: string): string {
   const text = typeof detail === "string"
@@ -234,7 +247,6 @@ function AuthPage({ error, isRegisterMode, onModeChange, onSubmit }: AuthPagePro
 }
 
 function App() {
-
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
     return !!localStorage.getItem("access_token");
   });
@@ -248,17 +260,38 @@ function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
+    const saved = localStorage.getItem("sidebar_open");
+    if (saved !== null) return saved === "true";
+    return typeof window !== "undefined" ? window.innerWidth > 720 : true;
+  });
+
   const [model, setModel] = useState("gemini-3.1-flash-lite");
   const [error, setError] = useState("");
   const [isRegisterMode, setIsRegisterMode] = useState(false);
-  const [fileName, setFileName] = useState("");
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
-  const [uploadingFile, setUploadingFile] = useState(false);
+
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+  const [uploadedDocuments, setUploadedDocuments] = useState<UploadedDoc[]>([]);
+
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const toggleSidebar = () => {
+    setSidebarOpen((prev) => {
+      const next = !prev;
+      localStorage.setItem("sidebar_open", String(next));
+      return next;
+    });
+  };
+
+  const closeSidebar = () => {
+    setSidebarOpen(false);
+    localStorage.setItem("sidebar_open", "false");
+  };
 
   const authenticatedFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
     const headers = new Headers(init.headers);
@@ -272,7 +305,7 @@ function App() {
     setError("");
 
     const target = e.currentTarget as HTMLFormElement;
-    const username = (target.elements.namedItem("username") as HTMLInputElement).value;
+    const userVal = (target.elements.namedItem("username") as HTMLInputElement).value;
     const password = (target.elements.namedItem("password") as HTMLInputElement).value;
 
     try {
@@ -280,7 +313,7 @@ function App() {
         const registrationResponse = await fetch("/api/auth/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username, password }),
+          body: JSON.stringify({ username: userVal, password }),
         });
 
         if (!registrationResponse.ok) {
@@ -294,7 +327,7 @@ function App() {
         }
       }
 
-      const formData = new URLSearchParams({ username, password });
+      const formData = new URLSearchParams({ username: userVal, password });
       const tokenResponse = await fetch("/api/auth/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -310,8 +343,8 @@ function App() {
 
       const data = await tokenResponse.json();
       localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem("username", username);
-      setUsername(username);
+      localStorage.setItem("username", userVal);
+      setUsername(userVal);
       setIsLoggedIn(true);
       setIsRegisterMode(false);
     } catch (err) {
@@ -325,19 +358,20 @@ function App() {
     setConversations([]);
     setMessages([]);
     setThreadId(null);
+    setUploadedDocuments([]);
+    setPendingFiles([]);
     setAccountMenuOpen(false);
   };
 
   useEffect(() => {
     if (!isLoggedIn) return;
     const token = localStorage.getItem("access_token");
-    fetch("/api/conversations",
-     {
-      headers: { "Authorization": `Bearer ${token}` }
+    fetch("/api/conversations", {
+      headers: { Authorization: `Bearer ${token}` },
     })
       .then((response) => {
         if (response.status === 401) {
-          handleLogout(); // Token expired dynamically according to auth.py
+          handleLogout();
           return [];
         }
         return response.ok ? response.json() : [];
@@ -355,17 +389,35 @@ function App() {
   }, [conversations, isLoggedIn]);
 
   useEffect(() => {
-  bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-}, [messages, loading]);
-
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
 
   async function selectConversation(id: string) {
     setThreadId(id);
-    setSidebarOpen(false);
+    if (window.innerWidth <= 720) {
+      setSidebarOpen(false);
+    }
     setError("");
     setOpenMenuId(null);
-    const response = await authenticatedFetch(`/api/conversations/${id}/messages`);
-    if (response.ok) setMessages(await response.json());
+    setPendingFiles([]);
+
+    const [msgRes, filesRes] = await Promise.all([
+      authenticatedFetch(`/api/conversations/${id}/messages`),
+      authenticatedFetch(`/api/conversations/${id}/files`),
+    ]);
+
+    if (msgRes.ok) {
+      setMessages(await msgRes.json());
+    } else {
+      setMessages([]);
+    }
+
+    if (filesRes.ok) {
+      const filesData = await filesRes.json();
+      setUploadedDocuments(filesData);
+    } else {
+      setUploadedDocuments([]);
+    }
   }
 
   async function shareConversation(conversation: Conversation) {
@@ -390,6 +442,8 @@ function App() {
     if (threadId === conversation.thread_id) {
       setThreadId(null);
       setMessages([]);
+      setUploadedDocuments([]);
+      setPendingFiles([]);
     }
     setOpenMenuId(null);
   }
@@ -401,14 +455,155 @@ function App() {
     setConversations((current) => [conversation, ...current]);
     setThreadId(conversation.thread_id);
     setMessages([]);
+    setUploadedDocuments([]);
+    setPendingFiles([]);
     setError("");
-    setSidebarOpen(false);
+    if (window.innerWidth <= 720) {
+      setSidebarOpen(false);
+    }
+  }
+
+  function handleFileSelection(event: React.ChangeEvent<HTMLInputElement>) {
+    const selectedFiles = Array.from(event.target.files || []);
+    if (!selectedFiles.length) return;
+
+    const validExtensions = [".pdf", ".docx", ".txt", ".md"];
+    const validFiles: File[] = [];
+    const errors: string[] = [];
+
+    for (const file of selectedFiles) {
+      const ext = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+      if (!validExtensions.includes(ext)) {
+        errors.push(`"${file.name}" has an unsupported format. Supported: .pdf, .docx, .txt, .md`);
+        continue;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        errors.push(`"${file.name}" exceeds the 10 MB size limit.`);
+        continue;
+      }
+      if (pendingFiles.some((f) => f.name === file.name && f.size === file.size)) {
+        continue;
+      }
+      validFiles.push(file);
+    }
+
+    if (errors.length > 0) {
+      setError(errors.join(" "));
+    } else {
+      setError("");
+    }
+
+    if (validFiles.length > 0) {
+      setPendingFiles((prev) => [...prev, ...validFiles]);
+    }
+
+    if (fileRef.current) {
+      fileRef.current.value = "";
+    }
+  }
+
+  function handleRemovePendingFile(indexToRemove: number) {
+    setPendingFiles((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  function handleClearPendingFiles() {
+    setPendingFiles([]);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  async function handleUploadFiles() {
+    if (!pendingFiles.length || uploadingFiles) return;
+    setError("");
+
+    let activeThread = threadId;
+    if (!activeThread) {
+      const response = await authenticatedFetch("/api/conversations", { method: "POST" });
+      if (!response.ok) {
+        setError("Could not create conversation for upload.");
+        return;
+      }
+      const conversation: Conversation = await response.json();
+      activeThread = conversation.thread_id;
+      setThreadId(activeThread);
+      setConversations((current) => [conversation, ...current]);
+    }
+
+    setUploadingFiles(true);
+    const successfullyUploaded: UploadedDoc[] = [];
+    const failedFileNames: string[] = [];
+
+    for (const file of pendingFiles) {
+      const form = new FormData();
+      form.append("file", file);
+      try {
+        const response = await authenticatedFetch(`/api/conversations/${activeThread}/files`, {
+          method: "POST",
+          body: form,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(
+            publicErrorMessage(
+              errorData.detail,
+              `Failed to upload "${file.name}".`,
+            ),
+          );
+        }
+
+        const data = await response.json();
+        successfullyUploaded.push({
+          filename: data.filename || file.name,
+          num_chunks: data.num_chunks,
+          size: file.size,
+        });
+      } catch (uploadError) {
+        failedFileNames.push(file.name);
+        setError(uploadError instanceof Error ? uploadError.message : `Failed to upload "${file.name}".`);
+      }
+    }
+
+    if (successfullyUploaded.length > 0) {
+      setUploadedDocuments((prev) => {
+        const existingSet = new Set(prev.map((d) => d.filename));
+        const newlyAdded = successfullyUploaded.filter((d) => !existingSet.has(d.filename));
+        return [...prev, ...newlyAdded];
+      });
+    }
+
+    if (failedFileNames.length === 0) {
+      setPendingFiles([]);
+    } else {
+      setPendingFiles((prev) => prev.filter((f) => failedFileNames.includes(f.name)));
+    }
+
+    setUploadingFiles(false);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  async function handleRemoveUploadedDocument(filename: string) {
+    if (!threadId) return;
+    try {
+      const response = await authenticatedFetch(
+        `/api/conversations/${threadId}/files/${encodeURIComponent(filename)}`,
+        { method: "DELETE" },
+      );
+      if (response.ok) {
+        setUploadedDocuments((prev) => prev.filter((d) => d.filename !== filename));
+      } else {
+        setError(`Unable to remove "${filename}".`);
+      }
+    } catch {
+      setError(`Unable to remove "${filename}".`);
+    }
   }
 
   async function submitMessage(event?: FormEvent) {
     event?.preventDefault();
     const trimmed = input.trim();
-    if (!trimmed || loading || uploadingFile) return;
+    if (!trimmed || loading || uploadingFiles) return;
+
     let activeThread = threadId;
     if (!activeThread) {
       const response = await authenticatedFetch("/api/conversations", { method: "POST" });
@@ -418,14 +613,12 @@ function App() {
       setThreadId(activeThread);
       setConversations((current) => [conversation, ...current]);
     }
+
     setError("");
-    if (pendingFile) {
-      const uploaded = await uploadFile(pendingFile, activeThread);
-      if (!uploaded) return;
-    }
     setInput("");
     setMessages((current) => [...current, { role: "user", content: trimmed }]);
     setLoading(true);
+
     try {
       const response = await authenticatedFetch("/api/chat", {
         method: "POST",
@@ -451,33 +644,6 @@ function App() {
     }
   }
 
-  async function uploadFile(file: File, activeThread: string) {
-    setUploadingFile(true);
-    const form = new FormData();
-    form.append("file", file);
-    try {
-      const response = await authenticatedFetch(`/api/conversations/${activeThread}/files`, { method: "POST", body: form });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          publicErrorMessage(
-            errorData.detail,
-            "This file could not be added to the conversation.",
-          ),
-        );
-      }
-      setPendingFile(null);
-      setFileName("");
-      if (fileRef.current) fileRef.current.value = "";
-      return true;
-    } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : "This file could not be added to the conversation.");
-      return false;
-    } finally {
-      setUploadingFile(false);
-    }
-  }
-  
   if (!isLoggedIn) {
     return (
       <AuthPage
@@ -491,46 +657,79 @@ function App() {
       />
     );
   }
+
   return (
     <div className="app-shell">
-      <aside className={`sidebar ${sidebarOpen ? "sidebar--open" : ""}`}>
-        <div className="sidebar-top">
-          <button className="brand" onClick={newChat} aria-label="Start a new chat">
-            <span className="brand-mark"><BrandLogo size={18} /></span>
-            <span>Pagetrail</span>
+      <aside className={`sidebar ${sidebarOpen ? "sidebar--open" : "sidebar--closed"}`}>
+        <div className="sidebar-header">
+          <div className="sidebar-top">
+            <button className="brand" onClick={newChat} aria-label="Start a new chat">
+              <span className="brand-mark"><BrandLogo size={18} /></span>
+              <span>Pagetrail</span>
+            </button>
+            <button
+              className="icon-button sidebar-close"
+              onClick={closeSidebar}
+              aria-label="Hide sidebar"
+              title="Hide sidebar"
+            >
+              <PanelLeftClose size={18} />
+            </button>
+          </div>
+          <button className="new-chat" onClick={newChat}>
+            <Plus size={17} /> New chat <span className="shortcut">Ctrl K</span>
           </button>
-          <button className="icon-button sidebar-close" onClick={() => setSidebarOpen(false)} aria-label="Close sidebar"><X size={18} /></button>
+          <div className="sidebar-search">
+            <Search size={16} />
+            <input placeholder="Search chats" />
+          </div>
         </div>
-        <button className="new-chat" onClick={newChat}><Plus size={17} /> New chat <span className="shortcut">Ctrl K</span></button>
-        <div className="sidebar-search"><Search size={16} /><input placeholder="Search chats" /></div>
-        <div className="history-heading">Conversations <MoreHorizontal size={17} /></div>
-        <nav className="history-list">
-          {conversations.length === 0 && <p className="empty-history">Your recent conversations will appear here.</p>}
-          {conversations.map((conversation) => (
-            <div key={conversation.thread_id} className={`history-item ${conversation.thread_id === threadId ? "active" : ""}`}>
-              <button className="history-select" onClick={() => selectConversation(conversation.thread_id)}>
-                <MessageSquare size={15} /><span>{conversation.name}</span>
-              </button>
-              <button
-                className="history-menu-button"
-                aria-label={`Actions for ${conversation.name}`}
-                aria-expanded={openMenuId === conversation.thread_id}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setOpenMenuId((current) => current === conversation.thread_id ? null : conversation.thread_id);
-                }}
-              >
-                <MoreHorizontal size={17} />
-              </button>
-              {openMenuId === conversation.thread_id && (
-                <div className="history-menu">
-                  <button onClick={() => shareConversation(conversation)}><Copy size={14} /> Share</button>
-                  <button className="danger" onClick={() => removeConversation(conversation)}><X size={14} /> Delete</button>
-                </div>
-              )}
+
+        <div className="sidebar-scroll-area">
+          <div className="history-heading">Conversations <MoreHorizontal size={17} /></div>
+          <nav className="history-list">
+            {conversations.length === 0 && <p className="empty-history">Your recent conversations will appear here.</p>}
+            {conversations.map((conversation) => (
+              <div key={conversation.thread_id} className={`history-item ${conversation.thread_id === threadId ? "active" : ""}`}>
+                <button className="history-select" onClick={() => selectConversation(conversation.thread_id)}>
+                  <MessageSquare size={15} /><span>{conversation.name}</span>
+                </button>
+                <button
+                  className="history-menu-button"
+                  aria-label={`Actions for ${conversation.name}`}
+                  aria-expanded={openMenuId === conversation.thread_id}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setOpenMenuId((current) => current === conversation.thread_id ? null : conversation.thread_id);
+                  }}
+                >
+                  <MoreHorizontal size={17} />
+                </button>
+                {openMenuId === conversation.thread_id && (
+                  <div className="history-menu">
+                    <button onClick={() => shareConversation(conversation)}><Copy size={14} /> Share</button>
+                    <button className="danger" onClick={() => removeConversation(conversation)}><X size={14} /> Delete</button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </nav>
+
+          {uploadedDocuments.length > 0 && (
+            <div className="sidebar-documents">
+              <div className="history-heading">Documents ({uploadedDocuments.length})</div>
+              <div className="sidebar-doc-list">
+                {uploadedDocuments.map((doc, idx) => (
+                  <div key={idx} className="sidebar-doc-item" title={doc.filename}>
+                    <FileText size={14} />
+                    <span>{doc.filename}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
-        </nav>
+          )}
+        </div>
+
         <div className="sidebar-footer">
           <div className="account-menu-wrap">
             <button
@@ -558,15 +757,27 @@ function App() {
           </div>
         </div>
       </aside>
-      {sidebarOpen && <button className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} aria-label="Close sidebar" />}
+
+      {sidebarOpen && <button className="sidebar-backdrop" onClick={closeSidebar} aria-label="Close sidebar" />}
+
       <main className="main-panel">
         <header className="topbar">
-          <button className="icon-button menu-button" onClick={() => setSidebarOpen(true)} aria-label="Open sidebar"><Menu size={19} /></button>
-          <button className="model-picker" onClick={() => setModel(model === "gemini-3.1-flash-lite" ? "gemini-2.5-flash" : "gemini-3.1-flash-lite")}>
-            <span className="status-dot" /> {model === "gemini-3.1-flash-lite" ? "Gemini Flash Lite" : "Gemini Flash"} <ChevronDown size={15} />
-          </button>
+          <div className="topbar-left">
+            <button
+              className="icon-button sidebar-toggle"
+              onClick={toggleSidebar}
+              aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+              title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+            >
+              {sidebarOpen ? <PanelLeftClose size={19} /> : <PanelLeftOpen size={19} />}
+            </button>
+            <button className="model-picker" onClick={() => setModel(model === "gemini-3.1-flash-lite" ? "gemini-2.5-flash" : "gemini-3.1-flash-lite")}>
+              <span className="status-dot" /> {model === "gemini-3.1-flash-lite" ? "Gemini Flash Lite" : "Gemini Flash"} <ChevronDown size={15} />
+            </button>
+          </div>
           <div className="topbar-actions"><button className="icon-button" aria-label="Share chat"><MoreHorizontal size={19} /></button><button className="avatar small">{username?.trim() ? username.trim().charAt(0).toUpperCase() : "?"}</button></div>
         </header>
+
         <section className={`chat-stage ${messages.length ? "chat-stage--active" : ""}`}>
           {messages.length === 0 ? (
             <div className="welcome">
@@ -583,14 +794,140 @@ function App() {
               <div ref={bottomRef} />
             </div>
           )}
+
           {error && <div className="error-banner">{error}</div>}
+
+          {/* Uploaded Documents List */}
+          {uploadedDocuments.length > 0 && (
+            <div className="document-list-container" aria-label="Document list">
+              <div className="document-list-header">
+                <div className="document-list-title">
+                  <FileText size={15} />
+                  <span>Document list ({uploadedDocuments.length})</span>
+                </div>
+              </div>
+              <div className="document-list" role="list">
+                {uploadedDocuments.map((doc, idx) => (
+                  <div key={`${doc.filename}-${idx}`} className="document-item" role="listitem">
+                    <FileText size={15} className="document-icon" />
+                    <span className="document-name" title={doc.filename}>{doc.filename}</span>
+                    {doc.size ? (
+                      <span className="document-meta">{formatFileSize(doc.size)}</span>
+                    ) : doc.num_chunks ? (
+                      <span className="document-meta">{doc.num_chunks} chunk{doc.num_chunks > 1 ? "s" : ""}</span>
+                    ) : null}
+                    <span className="document-badge">Indexed</span>
+                    <button
+                      type="button"
+                      className="document-remove"
+                      onClick={() => handleRemoveUploadedDocument(doc.filename)}
+                      aria-label={`Remove document ${doc.filename}`}
+                      title="Remove document"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Pending Files Preview List */}
+          {pendingFiles.length > 0 && (
+            <div className="file-preview-card" aria-label="File preview list">
+              <div className="file-preview-header">
+                <div className="file-preview-title">
+                  <Paperclip size={14} />
+                  <span>Files ready to upload ({pendingFiles.length})</span>
+                </div>
+                <button
+                  type="button"
+                  className="file-preview-clear"
+                  onClick={handleClearPendingFiles}
+                  disabled={uploadingFiles}
+                >
+                  Clear all
+                </button>
+              </div>
+
+              <div className="file-preview-list" role="list">
+                {pendingFiles.map((file, index) => (
+                  <div key={`${file.name}-${index}`} className="file-preview-item" role="listitem">
+                    <div className="file-preview-info">
+                      <FileText size={15} className="file-preview-icon" />
+                      <span className="file-preview-name" title={file.name}>{file.name}</span>
+                      <span className="file-preview-size">{formatFileSize(file.size)}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="file-preview-remove"
+                      onClick={() => handleRemovePendingFile(index)}
+                      disabled={uploadingFiles}
+                      aria-label={`Remove ${file.name}`}
+                      title="Remove file"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="file-preview-actions">
+                <button
+                  type="button"
+                  className="upload-confirm-button"
+                  onClick={handleUploadFiles}
+                  disabled={uploadingFiles}
+                >
+                  {uploadingFiles ? (
+                    <>
+                      <span className="upload-spinner" />
+                      <span>Uploading files...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ArrowUp size={15} className="upload-icon" />
+                      <span>Upload files</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
           <form className="composer-wrap" onSubmit={submitMessage}>
-            {fileName && <div className={`file-chip ${uploadingFile ? "file-chip--uploading" : ""}`}><FileText size={14} /> <span>{fileName}</span>{uploadingFile && <span className="file-chip-status">Uploading...</span>}<button type="button" onClick={() => { setPendingFile(null); setFileName(""); if (fileRef.current) fileRef.current.value = ""; }} disabled={uploadingFile}><X size={13} /></button></div>}
             <div className="composer">
-              <input ref={fileRef} type="file" accept=".pdf,.docx,.txt,.md" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) { setPendingFile(file); setFileName(file.name); setError(""); } }} />
-              <button type="button" className="composer-button" onClick={() => fileRef.current?.click()} aria-label="Attach file"><Paperclip size={19} /></button>
-              <input value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask your documents or search the web..." aria-label="Ask your documents or search the web" />
-              <button className={`send-button ${input.trim() ? "send-button--ready" : ""}`} aria-label="Send message" disabled={!input.trim() || loading}><ArrowUp size={17} /></button>
+              <input
+                ref={fileRef}
+                type="file"
+                multiple
+                accept=".pdf,.docx,.txt,.md"
+                hidden
+                onChange={handleFileSelection}
+              />
+              <button
+                type="button"
+                className="composer-button"
+                onClick={() => fileRef.current?.click()}
+                aria-label="Attach documents"
+                title="Attach documents"
+              >
+                <Paperclip size={19} />
+              </button>
+              <input
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder="Ask your documents or search the web..."
+                aria-label="Ask your documents or search the web"
+              />
+              <button
+                type="submit"
+                className={`send-button ${input.trim() ? "send-button--ready" : ""}`}
+                aria-label="Send message"
+                disabled={!input.trim() || loading || uploadingFiles}
+              >
+                <ArrowUp size={17} />
+              </button>
             </div>
             <p className="composer-note">Pagetrail can search your files and the web. Check important information.</p>
           </form>
@@ -602,10 +939,22 @@ function App() {
 
 function Message({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
-  return <div className={`message-row ${isUser ? "user" : "assistant"}`}>
-    {isUser ? <div className="avatar message-avatar">s</div> : <div className="assistant-avatar"><BrandLogo size={15} /></div>}
-    <div className="message-content"><div className="message-role">{isUser ? "You" : "Pagetrail"}</div>{isUser ? <div className="message-text">{message.content}</div> : <AssistantText content={message.content} />}{!isUser && <div className="message-actions"><button aria-label="Copy response"><Copy size={14} /></button><button aria-label="Good response"><ThumbsUp size={14} /></button><button aria-label="Bad response"><ThumbsDown size={14} /></button></div>}</div>
-  </div>;
+  return (
+    <div className={`message-row ${isUser ? "user" : "assistant"}`}>
+      {isUser ? <div className="avatar message-avatar">s</div> : <div className="assistant-avatar"><BrandLogo size={15} /></div>}
+      <div className="message-content">
+        <div className="message-role">{isUser ? "You" : "Pagetrail"}</div>
+        {isUser ? <div className="message-text">{message.content}</div> : <AssistantText content={message.content} />}
+        {!isUser && (
+          <div className="message-actions">
+            <button aria-label="Copy response"><Copy size={14} /></button>
+            <button aria-label="Good response"><ThumbsUp size={14} /></button>
+            <button aria-label="Bad response"><ThumbsDown size={14} /></button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default App;

@@ -62,24 +62,27 @@ def read_pdf(file_path: str) -> str:
     raise ValueError(f"Unsupported file type: {suffix}, Please provide a PDF, DOCX, TXT, or MD file.")
 
 
-def add_document_to_vector_store(file_path: str, thread_id: str):
+def add_document_to_vector_store(
+    file_path: str, thread_id: str, original_filename: str | None = None
+):
     """
     Read a document, split it into chunks, and add it to the vector store.
     """
     text = read_pdf(file_path)
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = text_splitter.split_text(text)
+    source_name = original_filename or Path(file_path).name
     documents: List[Document] = [
         Document(
             page_content=chunk,
-            metadata={"thread_id": thread_id, "source": Path(file_path).name},
+            metadata={"thread_id": thread_id, "source": source_name},
         )
         for chunk in chunks
     ]
 
     vectors = _get_embeddings().embed_documents(
-    [document.page_content for document in documents]
-)
+        [document.page_content for document in documents]
+    )
 
     rows = []
 
@@ -101,24 +104,24 @@ def add_document_to_vector_store(file_path: str, thread_id: str):
         )
     with engine.begin() as connection:
         connection.execute(insert(rag_documents), rows)
-
-    return {"filename": Path(file_path).name, "num_chunks": len(chunks)}
-
-
-# def _cosine_similarity(first: List[float], second: List[float]) -> float:
-#     numerator = sum(left * right for left, right in zip(first, second))
-#     first_norm = math.sqrt(sum(value * value for value in first))
-#     second_norm = math.sqrt(sum(value * value for value in second))
-#     if not first_norm or not second_norm:
-#         return 0.0
-#     return numerator / (first_norm * second_norm)
+    return {
+        "filename": source_name,
+        "num_chunks": len(chunks),
+    }
 
 
-def retrieve_documents(query: str, thread_id: str ,user_id: int, k: int = 5):
+def retrieve_documents(
+    query: str,
+    thread_id: str,
+    user_id: int,
+    k: int = 5,
+):
     """
     Retrieve the top-k relevant document chunks using pgvector.
+    Print retrieval results temporarily for local evaluation.
     """
     query_vector = _get_embeddings().embed_query(query)
+
     if len(query_vector) != EMBEDDING_DIM:
         raise ValueError(
             f"Expected {EMBEDDING_DIM} dimensions, "
@@ -128,10 +131,12 @@ def retrieve_documents(query: str, thread_id: str ,user_id: int, k: int = 5):
     distance = rag_documents.c.embedding_vector.cosine_distance(
         query_vector
     ).label("distance")
+
     conversations = Conversation.__table__
 
     statement = (
         select(
+            rag_documents.c.id,
             rag_documents.c.content,
             rag_documents.c.source,
             distance,
@@ -153,17 +158,38 @@ def retrieve_documents(query: str, thread_id: str ,user_id: int, k: int = 5):
 
     with engine.connect() as connection:
         ranked_rows = connection.execute(statement).mappings().all()
-        if not ranked_rows:
-            return "No relevant documents found."
 
-        return [
-            {
-                "chunk_index": index,
-                "content": row["content"],
-                "metadata": {
-                    "thread_id": thread_id,
-                    "source": row["source"],
-                },
-            }
-            for index, row in enumerate(ranked_rows, start=1)
-        ]
+    # TEMPORARY DEBUG LOGGING: use locally for retrieval evaluation.
+    print("\n" + "=" * 70)
+    print(f"[RAG DEBUG] Query: {query!r}")
+    print(f"[RAG DEBUG] Retrieved {len(ranked_rows)} chunks")
+
+    for rank, row in enumerate(ranked_rows, start=1):
+        content = row["content"] or ""
+        distance_value = float(row["distance"])
+
+        print(f"\n--- Rank #{rank} ---")
+        print(f"Chunk ID: {row['id']}")
+        print(f"Source: {row['source']}")
+        print(
+            f"Cosine distance: {distance_value:.6f} "
+            "(lower is better)"
+        )
+        print(f"Chunk preview: {content[:400]}")
+
+    print("=" * 70)
+
+    if not ranked_rows:
+        return "No relevant documents found."
+
+    return [
+        {
+            "chunk_index": index,
+            "content": row["content"],
+            "metadata": {
+                "thread_id": thread_id,
+                "source": row["source"],
+            },
+        }
+        for index, row in enumerate(ranked_rows, start=1)
+    ]
