@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import brandLogoUrl from "./assets/pagetrail-icon.png";
+import Landing from "./Landing";
 import {
   ArrowUp,
   ChevronDown,
@@ -247,6 +248,12 @@ function AuthPage({ error, isRegisterMode, onModeChange, onSubmit }: AuthPagePro
 }
 
 function App() {
+  // Show landing page first, then auth, then the main app
+  const [showLanding, setShowLanding] = useState<boolean>(() => {
+    // Skip landing if already logged in
+    return !localStorage.getItem("access_token");
+  });
+
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
     return !!localStorage.getItem("access_token");
   });
@@ -642,6 +649,10 @@ function App() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (showLanding && !isLoggedIn) {
+    return <Landing onEnterApp={() => setShowLanding(false)} />;
   }
 
   if (!isLoggedIn) {

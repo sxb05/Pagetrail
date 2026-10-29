@@ -1,0 +1,358 @@
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap");
+
+/* ============================================================
+   PageTrail Landing Page — Hero
+   ============================================================ */
+
+:root {
+  --bg: #000;
+  --fg: #fff;
+  --pad-x: clamp(20px, 6.95vw, 120px);
+}
+
+.landing-root {
+  all: initial;
+  display: block;
+  font-family: 'Poppins', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.landing-root *,
+.landing-root *::before,
+.landing-root *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Hero section ────────────────────────────────────────────── */
+.hero {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  height: 100svh;
+  min-height: 520px;
+  overflow: hidden;
+  background: #000;
+  color: #fff;
+}
+
+#scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+  touch-action: none;
+}
+
+#scene.dragging {
+  cursor: grabbing;
+}
+
+.ui {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.ui a,
+.ui button {
+  pointer-events: auto;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ── Navigation ─────────────────────────────────────────────── */
+.nav {
+  position: absolute;
+  top: clamp(24px, 4.7vh, 40px);
+  left: var(--pad-x);
+  right: var(--pad-x);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  text-decoration: none;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  font-family: 'Poppins', sans-serif;
+}
+
+.logo-mark {
+  width: 20px;
+  height: 40px;
+  background: #fff;
+  border-radius: 0 20px 20px 0;
+  flex-shrink: 0;
+}
+
+.logo b {
+  font-weight: 700;
+}
+
+.logo span {
+  font-weight: 400;
+}
+
+.nav-links {
+  display: flex;
+  gap: clamp(20px, 4.1vw, 60px);
+  list-style: none;
+}
+
+.nav-links a {
+  color: #fff;
+  text-decoration: none;
+  font-size: 15px;
+  font-weight: 500;
+  position: relative;
+  font-family: 'Poppins', sans-serif;
+  cursor: pointer;
+}
+
+.nav-links a::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 0.35s ease;
+}
+
+.nav-links a:hover::after {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+
+/* ── Arrow buttons ──────────────────────────────────────────── */
+.arrows {
+  position: absolute;
+  top: 18.9%;
+  left: 76.7%;
+  display: flex;
+  gap: 32px;
+  transform: translate(-19px, -50%);
+}
+
+.arrow {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 2.5px solid #fff;
+  background: transparent;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.25s, color 0.25s;
+  font-family: 'Poppins', sans-serif;
+}
+
+.arrow svg {
+  width: 18px;
+  height: 18px;
+}
+
+.arrow:hover {
+  background: #fff;
+  color: #000;
+}
+
+/* ── Pagination dots ────────────────────────────────────────── */
+.dots {
+  position: absolute;
+  right: calc(var(--pad-x) - 7px);
+  top: 49.4%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 33px;
+}
+
+.dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: #fff;
+  cursor: pointer;
+  transition: background 0.25s;
+}
+
+.dot.active {
+  background: transparent;
+}
+
+/* ── Tagline ────────────────────────────────────────────────── */
+.tagline {
+  position: absolute;
+  left: var(--pad-x);
+  bottom: clamp(40px, 7.5vh, 70px);
+  font-size: clamp(24px, 2.65vw, 44px);
+  line-height: 1.2;
+  font-weight: 300;
+  letter-spacing: -0.01em;
+  font-family: 'Poppins', sans-serif;
+}
+
+.tagline strong {
+  font-weight: 700;
+  display: block;
+}
+
+/* ── CTA row ────────────────────────────────────────────────── */
+.cta-row {
+  position: absolute;
+  left: 45.6%;
+  right: -1vw;
+  top: 88.7%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+}
+
+.cta {
+  flex: none;
+  padding: 0 15px;
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  border: 1.5px solid rgba(255, 255, 255, 0.85);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.15);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 400;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.25s, color 0.25s;
+  font-family: 'Poppins', sans-serif;
+  white-space: nowrap;
+}
+
+.cta:hover {
+  background: #fff;
+  color: #000;
+}
+
+.cta-line {
+  flex: 1;
+  height: 1.5px;
+  background: rgba(255, 255, 255, 0.8);
+  min-width: 40px;
+}
+
+.count {
+  flex: none;
+  font-size: clamp(140px, 19.8vw, 360px);
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: transparent;
+  -webkit-text-stroke: 1.5px rgba(255, 255, 255, 0.9);
+  transform: translateY(6%);
+  user-select: none;
+  font-family: 'Poppins', sans-serif;
+}
+
+/* ── Loader ─────────────────────────────────────────────────── */
+.loader {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  opacity: 0.6;
+  transition: opacity 0.6s;
+  font-family: 'Poppins', sans-serif;
+  pointer-events: none;
+}
+
+.loader.done {
+  opacity: 0;
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 900px), (max-aspect-ratio: 1/1) {
+  .arrows {
+    left: auto;
+    right: var(--pad-x);
+    top: 15%;
+    transform: translateY(-50%);
+    gap: 14px;
+  }
+
+  .tagline {
+    bottom: clamp(150px, 20vh, 220px);
+  }
+
+  .cta-row {
+    left: var(--pad-x);
+    right: -3vw;
+    top: auto;
+    bottom: 24px;
+    transform: none;
+  }
+
+  .count {
+    font-size: clamp(120px, 22vw, 200px);
+  }
+}
+
+@media (max-width: 640px) {
+  .nav-links {
+    gap: 16px;
+  }
+
+  .nav-links a,
+  .logo {
+    font-size: 13px;
+  }
+
+  .dots {
+    gap: 20px;
+    right: 16px;
+  }
+
+  .dot {
+    width: 10px;
+    height: 10px;
+  }
+
+  .cta-row {
+    right: -8vw;
+  }
+
+  .count {
+    font-size: 120px;
+  }
+}
+
+@media (max-width: 420px) {
+  .nav-links li:nth-child(2) {
+    display: none;
+  }
+}
