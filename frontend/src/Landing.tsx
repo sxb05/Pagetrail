@@ -5,8 +5,8 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
-import "./landing.css";
-
+import "./Landing.css";
+import brandLogoUrl from "./assets/pagetrail-icon.png";
 const MODEL_URL =
   "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260929_212926_92423081-b0e4-4f5a-b650-14af6c05c058.glb";
 
@@ -23,6 +23,7 @@ const vertexShader = /* glsl */ `
     vEye    = normalize(mvPos.xyz);
   }
 `;
+
 
 /* ── Fragment shader ───────────────────────────────────────── */
 const fragmentShader = /* glsl */ `
@@ -753,10 +754,13 @@ export default function Landing({ onEnterApp }: Props) {
           </h1>
 
           {/* ── Navbar ── */}
+          {/* ── Navbar ── */}
           <header className="nav">
             <a href="#hero" className="logo" aria-label="PageTrail home">
-              <i className="logo-mark" aria-hidden="true" />
-              <b>Page</b><span>Trail</span>
+              <span className="logo-mark" aria-hidden="true">
+                <img src={brandLogoUrl} width={18} height={18} alt="" />
+              </span>
+              <span className="logo-text">Pagetrail</span>
             </a>
             <ul className="nav-links">
               <li><button type="button" className="nav-action" onClick={onEnterApp}>Product</button></li>

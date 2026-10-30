@@ -3,29 +3,29 @@ import os
 from pathlib import Path
 
 import uvicorn
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.api.routes.auth import router as auth_router
-from app.api.routes.chat import router as chat_router
-from app.api.routes.health import router as health_router
-from app.core.paths import BRAND_ICON, FRONTEND_DIST, FRONTEND_DIR, FRONTEND_PUBLIC
-from app.db.session import init_db
-from app.services.rag import init_rag_db
-from dotenv import load_dotenv
 
-# Find the project root, where .env is stored
+# Load environment variables before importing application modules.
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
-# Load environment variables from the root .env
 load_dotenv(PROJECT_ROOT / ".env")
 
-
-
-
+from app.api.routes.auth import router as auth_router  # noqa: E402
+from app.api.routes.chat import router as chat_router  # noqa: E402
+from app.api.routes.health import router as health_router  # noqa: E402
+from app.core.paths import (  # noqa: E402
+    BRAND_ICON,
+    FRONTEND_DIST,
+    FRONTEND_DIR,
+    FRONTEND_PUBLIC,
+)
+from app.db.session import init_db  # noqa: E402
+from app.services.rag import init_rag_db  # noqa: E402
 
 
 logger = logging.getLogger(__name__)
@@ -40,6 +40,7 @@ cors_origins = [
 ]
 
 app = FastAPI(title="PageTrail")
+
 app.include_router(auth_router)
 app.include_router(health_router)
 app.include_router(chat_router)
@@ -54,11 +55,19 @@ app.add_middleware(
 
 
 @app.exception_handler(SQLAlchemyError)
-async def sqlalchemy_error_handler(_request: Request, exc: SQLAlchemyError) -> JSONResponse:
+async def sqlalchemy_error_handler(
+    _request: Request,
+    exc: SQLAlchemyError,
+) -> JSONResponse:
     logger.exception("Database error", exc_info=exc)
     return JSONResponse(
         status_code=503,
-        content={"detail": "The database is temporarily unavailable. Please try again."},
+        content={
+            "detail": (
+                "The database is temporarily unavailable. "
+                "Please try again."
+            )
+        },
     )
 
 
@@ -69,16 +78,44 @@ def startup() -> None:
     init_db()
 
 
-@app.get("/")
-async def root_to_login():
-    return RedirectResponse(url="/login")
+def _frontend_index() -> Path:
+    """Return the built React entry point or fail clearly if missing."""
+    dist_root = FRONTEND_DIST.resolve()
+    index_file = (dist_root / "index.html").resolve()
+
+    if index_file.parent != dist_root or not index_file.is_file():
+        logger.error(
+            "Frontend build entry point not found: %s",
+            index_file,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "PageTrail frontend build is unavailable. "
+                "Build the frontend so frontend/dist/index.html exists."
+            ),
+        )
+
+    return index_file
+
+
+@app.get("/", include_in_schema=False)
+async def root() -> FileResponse:
+    """Serve the React app at / instead of redirecting to /login."""
+    return FileResponse(
+        _frontend_index(),
+        media_type="text/html",
+    )
 
 
 def _frontend_file(path: str) -> Path | None:
+    """Resolve frontend files without allowing path traversal."""
     root = FRONTEND_DIST.resolve()
     requested = (root / path).resolve()
+
     if requested != root and root not in requested.parents:
         return None
+
     return requested if requested.is_file() else None
 
 
@@ -86,6 +123,7 @@ def _frontend_file(path: str) -> Path | None:
 @app.get("/favicon.png", include_in_schema=False)
 def brand_icon(request: Request) -> FileResponse:
     name = Path(request.url.path).name
+
     for candidate in (
         FRONTEND_DIST / name,
         FRONTEND_PUBLIC / name,
@@ -93,22 +131,53 @@ def brand_icon(request: Request) -> FileResponse:
         BRAND_ICON,
     ):
         if candidate.is_file():
-            return FileResponse(candidate, media_type="image/png")
-    raise HTTPException(status_code=404, detail="Icon not found.")
+            return FileResponse(
+                candidate,
+                media_type="image/png",
+            )
+
+    raise HTTPException(
+        status_code=404,
+        detail="Icon not found.",
+    )
 
 
 if FRONTEND_DIST.exists():
     assets = FRONTEND_DIST / "assets"
+
     if assets.is_dir():
-        app.mount("/assets", StaticFiles(directory=assets), name="assets")
+        app.mount(
+            "/assets",
+            StaticFiles(directory=assets),
+            name="assets",
+        )
 
     @app.get("/{path:path}", include_in_schema=False)
     def frontend(path: str) -> FileResponse:
+        # Unknown API routes should return 404, not frontend HTML.
+        if path == "api" or path.startswith("api/"):
+            raise HTTPException(
+                status_code=404,
+                detail="API endpoint not found.",
+            )
+
+        # Serve existing files such as icons and manifests.
         requested = _frontend_file(path)
+
         if requested is not None:
             return FileResponse(requested)
-        return FileResponse(FRONTEND_DIST / "index.html")
+
+        # Let React handle frontend routes such as /login and /features.
+        return FileResponse(
+            _frontend_index(),
+            media_type="text/html",
+        )
 
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run(
+        "app.main:app",
+        host="127.0.0.1",
+        port=8000,
+        reload=True,
+    )
