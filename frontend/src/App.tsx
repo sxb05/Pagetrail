@@ -250,8 +250,9 @@ function AuthPage({ error, isRegisterMode, onModeChange, onSubmit }: AuthPagePro
 function App() {
   // Show landing page first, then auth, then the main app
   const [showLanding, setShowLanding] = useState<boolean>(() => {
-    // Skip landing if already logged in
-    return !localStorage.getItem("access_token");
+    // Show the public landing page on a normal visit, even for returning users.
+    // Preserve direct shared-conversation links so they can open the app directly.
+    return !new URLSearchParams(window.location.search).has("conversation");
   });
 
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
@@ -298,6 +299,14 @@ function App() {
   const closeSidebar = () => {
     setSidebarOpen(false);
     localStorage.setItem("sidebar_open", "false");
+  };
+
+  const enterApp = () => {
+    // Remove a landing-page anchor hash before switching to the chat/auth UI.
+    if (window.location.hash) {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    }
+    setShowLanding(false);
   };
 
   const authenticatedFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -362,6 +371,7 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem("access_token");
     setIsLoggedIn(false);
+    setShowLanding(true);
     setConversations([]);
     setMessages([]);
     setThreadId(null);
@@ -402,7 +412,7 @@ function App() {
   async function selectConversation(id: string) {
     setThreadId(id);
     if (window.innerWidth <= 720) {
-      setSidebarOpen(false);
+      closeSidebar();
     }
     setError("");
     setOpenMenuId(null);
@@ -466,7 +476,7 @@ function App() {
     setPendingFiles([]);
     setError("");
     if (window.innerWidth <= 720) {
-      setSidebarOpen(false);
+      closeSidebar();
     }
   }
 
@@ -651,8 +661,8 @@ function App() {
     }
   }
 
-  if (showLanding && !isLoggedIn) {
-    return <Landing onEnterApp={() => setShowLanding(false)} />;
+  if (showLanding) {
+    return <Landing onEnterApp={enterApp} />;
   }
 
   if (!isLoggedIn) {

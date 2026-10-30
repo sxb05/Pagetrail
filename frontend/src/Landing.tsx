@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useReducedMotion } from "framer-motion";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
@@ -144,20 +145,40 @@ interface Props {
 }
 
 export default function Landing({ onEnterApp }: Props) {
-  const canvasRef  = useRef<HTMLCanvasElement>(null);
-  const loaderRef  = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const loaderRef = useRef<HTMLDivElement>(null);
+  const [webglFailed, setWebglFailed] = useState(false);
+  const [activeDot, setActiveDot] = useState(1);
+  const prefersReducedMotion = useReducedMotion();
+  const prefersReducedMotionRef = useRef<boolean | null>(prefersReducedMotion);
+
+  useEffect(() => {
+    prefersReducedMotionRef.current = prefersReducedMotion;
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    let disposed = false;
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    } catch (error) {
+      console.warn("PageTrail landing: WebGL is unavailable; using the HTML headline fallback.", error);
+      setWebglFailed(true);
+      loaderRef.current?.classList.add("done");
+      return () => {
+        disposed = true;
+      };
+    }
+
     /* ── Renderer ─────────────────────────────────────────── */
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
     renderer.setClearColor(0x000000, 1);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     /* ── Scenes ───────────────────────────────────────────── */
-    const scene   = new THREE.Scene();
+    const scene = new THREE.Scene();
     const bgScene = new THREE.Scene();
 
     /* ── Camera ───────────────────────────────────────────── */
@@ -167,15 +188,25 @@ export default function Landing({ onEnterApp }: Props) {
     const bgCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
     /* ── Offscreen headline canvas ────────────────────────── */
-    const hCanvas  = document.createElement("canvas");
-    const hCtx     = hCanvas.getContext("2d")!;
-    let   headlineTex: THREE.CanvasTexture | null = null;
+    const hCanvas = document.createElement("canvas");
+    const context = hCanvas.getContext("2d");
+    if (!context) {
+      setWebglFailed(true);
+      loaderRef.current?.classList.add("done");
+      renderer.dispose();
+      return () => {
+        disposed = true;
+      };
+    }
+    const hCtx = context;
+    let headlineTex: THREE.CanvasTexture | null = null;
 
     function drawHeadline() {
-      const W   = canvas!.clientWidth  || window.innerWidth;
-      const H   = canvas!.clientHeight || window.innerHeight;
+      if (disposed) return;
+      const W = canvas!.clientWidth || window.innerWidth;
+      const H = canvas!.clientHeight || window.innerHeight;
       const DPR = Math.min(window.devicePixelRatio, 2);
-      hCanvas.width  = W * DPR;
+      hCanvas.width = W * DPR;
       hCanvas.height = H * DPR;
       hCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
 
@@ -193,13 +224,13 @@ export default function Landing({ onEnterApp }: Props) {
       const maxAllowed = W * (mobile ? 0.9 : 0.5);
       if (maxW > maxAllowed) fs *= maxAllowed / maxW;
 
-      hCtx.font      = `800 ${fs}px Poppins, sans-serif`;
+      hCtx.font = `800 ${fs}px Poppins, sans-serif`;
       hCtx.fillStyle = "#e9e9e9";
       hCtx.textAlign = "center";
       hCtx.textBaseline = "alphabetic";
 
-      const cx  = W * (mobile ? 0.5 : 0.505);
-      const cy  = H * (mobile ? 0.45 : 0.468);
+      const cx = W * (mobile ? 0.5 : 0.505);
+      const cy = H * (mobile ? 0.45 : 0.468);
       const gap = fs * 1.07;
       const cap = fs * 0.7;
 
@@ -212,19 +243,19 @@ export default function Landing({ onEnterApp }: Props) {
         headlineTex.needsUpdate = true;
       } else {
         headlineTex = new THREE.CanvasTexture(hCanvas);
-        headlineTex.colorSpace  = THREE.SRGBColorSpace;
-        headlineTex.minFilter   = THREE.LinearFilter;
+        headlineTex.colorSpace = THREE.SRGBColorSpace;
+        headlineTex.minFilter = THREE.LinearFilter;
         headlineTex.generateMipmaps = false;
       }
     }
 
     /* ── Background quad ──────────────────────────────────── */
     const bgMat = new THREE.ShaderMaterial({
-      vertexShader:   bgVertShader,
+      vertexShader: bgVertShader,
       fragmentShader: bgFragShader,
-      uniforms:       { uTex: { value: null } },
-      depthTest:      false,
-      depthWrite:     false,
+      uniforms: { uTex: { value: null } },
+      depthTest: false,
+      depthWrite: false,
     });
     const bgQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), bgMat);
     bgQuad.frustumCulled = false;
@@ -237,37 +268,37 @@ export default function Landing({ onEnterApp }: Props) {
         fragmentShader,
         side: backside ? THREE.BackSide : THREE.FrontSide,
         uniforms: {
-          uTexture:      { value: null },
-          uResolution:   { value: new THREE.Vector2() },
-          uIorR:         { value: 1.15 },
-          uIorY:         { value: 1.16 },
-          uIorG:         { value: 1.18 },
-          uIorC:         { value: 1.22 },
-          uIorB:         { value: 1.22 },
-          uIorP:         { value: 1.22 },
+          uTexture: { value: null },
+          uResolution: { value: new THREE.Vector2() },
+          uIorR: { value: 1.15 },
+          uIorY: { value: 1.16 },
+          uIorG: { value: 1.18 },
+          uIorC: { value: 1.22 },
+          uIorB: { value: 1.22 },
+          uIorP: { value: 1.22 },
           uRefractPower: { value: backside ? 0.22 : 0.30 },
-          uChromatic:    { value: 0.5 },
-          uSaturation:   { value: 1.08 },
-          uShininess:    { value: 90.0 },
-          uDiffuseness:  { value: 0.02 },
+          uChromatic: { value: 0.5 },
+          uSaturation: { value: 1.08 },
+          uShininess: { value: 90.0 },
+          uDiffuseness: { value: 0.02 },
           uFresnelPower: { value: 5.0 },
-          uLight:        { value: new THREE.Vector3(-1, 1, 1) },
-          uBackside:     { value: backside ? 1.0 : 0.0 },
+          uLight: { value: new THREE.Vector3(-1, 1, 1) },
+          uBackside: { value: backside ? 1.0 : 0.0 },
         },
       });
     }
 
     const frontMat = makeMat(false);
-    const backMat  = makeMat(true);
+    const backMat = makeMat(true);
 
     /* ── Render targets ───────────────────────────────────── */
-    let rtBack  = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
+    let rtBack = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
     let rtFront = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
-    backMat.uniforms.uTexture.value  = rtBack.texture;
+    backMat.uniforms.uTexture.value = rtBack.texture;
     frontMat.uniforms.uTexture.value = rtFront.texture;
 
     /* ── Cube scene graph ─────────────────────────────────── */
-    const pivot   = new THREE.Object3D();
+    const pivot = new THREE.Object3D();
     const spinner = new THREE.Object3D();
     spinner.rotation.set(-0.42, 0.62, 0.18);
     pivot.add(spinner);
@@ -275,62 +306,152 @@ export default function Landing({ onEnterApp }: Props) {
 
     let cubeMesh: THREE.Mesh | null = null;
 
-    function buildCubeMesh(geo: THREE.BufferGeometry) {
-      // Remove unwanted attrs
-      ["uv", "color", "tangent"].forEach(k => geo.deleteAttribute(k));
-      geo = mergeVertices(geo, 1e-4);
-      geo.computeVertexNormals();
+    function buildCubeMesh(inputGeometry: THREE.BufferGeometry): boolean {
+      if (disposed || cubeMesh) {
+        inputGeometry.dispose();
+        return false;
+      }
 
-      // Centre + normalise
-      geo.computeBoundingBox();
-      const box    = geo.boundingBox!;
-      const centre = new THREE.Vector3();
-      box.getCenter(centre);
-      geo.translate(-centre.x, -centre.y, -centre.z);
-      const size = new THREE.Vector3();
-      box.getSize(size);
-      const maxDim = Math.max(size.x, size.y, size.z);
-      geo.scale(1 / maxDim, 1 / maxDim, 1 / maxDim);
+      let geo = inputGeometry;
+      try {
+        // The glass shader needs positions only. Removing other attributes makes
+        // GLB parts compatible before merging and normals are rebuilt below.
+        Object.keys(geo.attributes).forEach((name) => {
+          if (name !== "position") geo.deleteAttribute(name);
+        });
 
-      const mesh = new THREE.Mesh(geo, frontMat);
-      spinner.add(mesh);
-      if (loaderRef.current) loaderRef.current.classList.add("done");
-      cubeMesh = mesh;
+        // Merge consistently non-indexed geometry so mixed GLB index layouts do
+        // not make mergeGeometries return null.
+        if (geo.index) {
+          const nonIndexed = geo.toNonIndexed();
+          geo.dispose();
+          geo = nonIndexed;
+        }
+
+        const welded = mergeVertices(geo, 1e-4);
+        if (welded !== geo) geo.dispose();
+        geo = welded;
+        geo.computeVertexNormals();
+        geo.computeBoundingBox();
+
+        const box = geo.boundingBox;
+        if (!box || !geo.getAttribute("position")?.count) {
+          throw new Error("The glass model has no usable vertex positions.");
+        }
+
+        const centre = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        if (!Number.isFinite(maxDim) || maxDim <= 0) {
+          throw new Error("The glass model has invalid dimensions.");
+        }
+
+        geo.translate(-centre.x, -centre.y, -centre.z);
+        geo.scale(1 / maxDim, 1 / maxDim, 1 / maxDim);
+        geo.computeVertexNormals();
+
+        const mesh = new THREE.Mesh(geo, frontMat);
+        spinner.add(mesh);
+        cubeMesh = mesh;
+        loaderRef.current?.classList.add("done");
+        return true;
+      } catch (error) {
+        console.warn("PageTrail landing: could not prepare the glass model.", error);
+        geo.dispose();
+        return false;
+      }
     }
 
-    // Load GLB, fallback to RoundedBoxGeometry
+    // The source GLB material/texture data is not used by our custom glass shader.
+    // Dispose it once its transformed position geometry has been copied.
+    function disposeLoadedModel(root: THREE.Object3D) {
+      const geometries = new Set<THREE.BufferGeometry>();
+      const materials = new Set<THREE.Material>();
+      const textures = new Set<THREE.Texture>();
+      root.traverse((child) => {
+        const mesh = child as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        geometries.add(mesh.geometry);
+        const list = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        list.forEach((material) => {
+          materials.add(material);
+          Object.values(material).forEach((value) => {
+            if (value instanceof THREE.Texture) textures.add(value);
+          });
+        });
+      });
+      geometries.forEach((geometry) => geometry.dispose());
+      textures.forEach((texture) => texture.dispose());
+      materials.forEach((material) => material.dispose());
+    }
+
+    // Load GLB, falling back to a rounded box if download or geometry merging fails.
     const loader = new GLTFLoader();
     loader.load(
       MODEL_URL,
       (gltf) => {
+        if (disposed) {
+          disposeLoadedModel(gltf.scene);
+          return;
+        }
+
         const parts: THREE.BufferGeometry[] = [];
-        gltf.scene.traverse((child) => {
-          if ((child as THREE.Mesh).isMesh) {
-            const m = child as THREE.Mesh;
-            const g = (m.geometry as THREE.BufferGeometry).clone();
-            g.applyMatrix4(m.matrixWorld);
-            parts.push(g);
+        let merged: THREE.BufferGeometry | null = null;
+        try {
+          gltf.scene.updateMatrixWorld(true);
+          gltf.scene.traverse((child) => {
+            if (!(child as THREE.Mesh).isMesh) return;
+            const mesh = child as THREE.Mesh;
+            let geometry = mesh.geometry.clone();
+            geometry.applyMatrix4(mesh.matrixWorld);
+            Object.keys(geometry.attributes).forEach((name) => {
+              if (name !== "position") geometry.deleteAttribute(name);
+            });
+            if (geometry.index) {
+              const nonIndexed = geometry.toNonIndexed();
+              geometry.dispose();
+              geometry = nonIndexed;
+            }
+            parts.push(geometry);
+          });
+
+          if (parts.length === 1) {
+            merged = parts[0];
+          } else if (parts.length > 1) {
+            merged = mergeGeometries(parts, false);
           }
+        } catch (error) {
+          console.warn("PageTrail landing: GLB geometry merge failed; using rounded-box fallback.", error);
+        }
+
+        parts.forEach((part) => {
+          if (part !== merged) part.dispose();
         });
-        const merged = parts.length > 1 ? mergeGeometries(parts) : parts[0];
-        if (merged) buildCubeMesh(merged);
-        else fallback();
+
+        // Release the loader's source assets; the displayed mesh uses our merged clone.
+        disposeLoadedModel(gltf.scene);
+
+        if (!merged || !buildCubeMesh(merged)) fallback();
       },
       undefined,
       () => fallback(),
     );
 
     function fallback() {
-      buildCubeMesh(new RoundedBoxGeometry(1, 1, 1, 8, 0.12));
+      if (disposed || cubeMesh) return;
+      if (!buildCubeMesh(new RoundedBoxGeometry(1, 1, 1, 8, 0.12))) {
+        setWebglFailed(true);
+        loaderRef.current?.classList.add("done");
+      }
     }
 
     /* ── Layout ───────────────────────────────────────────── */
     function layout() {
-      const W   = canvas!.clientWidth  || window.innerWidth;
-      const H   = canvas!.clientHeight || window.innerHeight;
+      const W = canvas!.clientWidth || window.innerWidth;
+      const H = canvas!.clientHeight || window.innerHeight;
       const DPR = Math.min(window.devicePixelRatio, 2);
-      const bW  = Math.round(W * DPR);
-      const bH  = Math.round(H * DPR);
+      const bW = Math.round(W * DPR);
+      const bH = Math.round(H * DPR);
 
       renderer.setPixelRatio(DPR);
       renderer.setSize(W, H, false);
@@ -340,9 +461,9 @@ export default function Landing({ onEnterApp }: Props) {
 
       rtBack.dispose();
       rtFront.dispose();
-      rtBack  = new THREE.WebGLRenderTarget(bW, bH, { type: THREE.HalfFloatType });
+      rtBack = new THREE.WebGLRenderTarget(bW, bH, { type: THREE.HalfFloatType });
       rtFront = new THREE.WebGLRenderTarget(bW, bH, { type: THREE.HalfFloatType });
-      backMat.uniforms.uTexture.value  = rtBack.texture;
+      backMat.uniforms.uTexture.value = rtBack.texture;
       frontMat.uniforms.uTexture.value = rtFront.texture;
 
       const res = new THREE.Vector2(bW, bH);
@@ -352,13 +473,13 @@ export default function Landing({ onEnterApp }: Props) {
       const mobile = W < 768 || W / H < 1;
 
       // Cube placement
-      const fov   = THREE.MathUtils.degToRad(30);
-      const visH  = 2 * Math.tan(fov / 2) * 10;
-      const visW  = visH * (W / H);
-      const sx    = mobile ? 0.5 : 0.517;
-      const sy    = mobile ? 0.45 : 0.488;
+      const fov = THREE.MathUtils.degToRad(30);
+      const visH = 2 * Math.tan(fov / 2) * 10;
+      const visW = visH * (W / H);
+      const sx = mobile ? 0.5 : 0.517;
+      const sy = mobile ? 0.45 : 0.488;
       pivot.position.set((sx - 0.5) * visW, (0.5 - sy) * visH, 0);
-      const pxEdge     = Math.min(H * 0.44, W * (mobile ? 0.45 : 0.29));
+      const pxEdge = Math.min(H * 0.44, W * (mobile ? 0.45 : 0.29));
       pivot.scale.setScalar((pxEdge / H) * visH);
 
       drawHeadline();
@@ -366,16 +487,16 @@ export default function Landing({ onEnterApp }: Props) {
     }
 
     /* ── Drag / rotation state ────────────────────────────── */
-    let dragging    = false;
+    let dragging = false;
     let lastX = 0, lastY = 0;
-    let velX  = 0, velY  = 0;
+    let velX = 0, velY = 0;
     let lastTime = performance.now();
 
     // Idle drift blend
     let idleBlend = 0; // 0→1 over 1s
     let idleTimer = 0;
     const IDLE_DELAY = 0.6; // seconds before idle drift kicks in
-    const IDLE_RAMP  = 1.0;
+    const IDLE_RAMP = 1.0;
 
     // Button spin state
     let btnRemaining = 0; // radians left
@@ -385,8 +506,9 @@ export default function Landing({ onEnterApp }: Props) {
       spinner.quaternion.premultiply(q);
     }
 
-    // Pointer capture
-    canvas.addEventListener("pointerdown", (e) => {
+    // Named pointer handlers are removed in cleanup (important with React StrictMode).
+    function onPointerDown(e: PointerEvent) {
+      if (disposed) return;
       dragging = true;
       lastX = e.clientX;
       lastY = e.clientY;
@@ -394,16 +516,20 @@ export default function Landing({ onEnterApp }: Props) {
       btnRemaining = 0;
       idleBlend = 0;
       idleTimer = 0;
-      canvas.classList.add("dragging");
-      canvas.setPointerCapture(e.pointerId);
-    });
+      canvas!.classList.add("dragging");
+      try {
+        canvas!.setPointerCapture(e.pointerId);
+      } catch {
+        // Pointer capture can fail in unusual browser/device states.
+      }
+    }
 
-    canvas.addEventListener("pointermove", (e) => {
-      if (!dragging) return;
+    function onPointerMove(e: PointerEvent) {
+      if (!dragging || disposed) return;
       const now = performance.now();
-      const dt  = Math.min((now - lastTime) / 1000, 0.05);
-      const dx  = (e.clientX - lastX) * 0.008;
-      const dy  = (e.clientY - lastY) * 0.008;
+      const dt = Math.min((now - lastTime) / 1000, 0.05);
+      const dx = (e.clientX - lastX) * 0.008;
+      const dy = (e.clientY - lastY) * 0.008;
       lastX = e.clientX;
       lastY = e.clientY;
 
@@ -412,10 +538,9 @@ export default function Landing({ onEnterApp }: Props) {
         velY = dy / dt;
       }
       lastTime = now;
-
       applyQuat(new THREE.Vector3(0, 1, 0), dx);
       applyQuat(new THREE.Vector3(1, 0, 0), dy);
-    });
+    }
 
     function endDrag() {
       if (!dragging) return;
@@ -424,25 +549,37 @@ export default function Landing({ onEnterApp }: Props) {
       idleTimer = 0;
     }
 
-    canvas.addEventListener("pointerup",     endDrag);
+    canvas.addEventListener("pointerdown", onPointerDown);
+    canvas.addEventListener("pointermove", onPointerMove);
+    canvas.addEventListener("pointerup", endDrag);
     canvas.addEventListener("pointercancel", endDrag);
+    canvas.addEventListener("lostpointercapture", endDrag);
+
+    function onContextLost(event: Event) {
+      event.preventDefault();
+      setWebglFailed(true);
+      loaderRef.current?.classList.add("done");
+    }
+    canvas.addEventListener("webglcontextlost", onContextLost);
 
     /* ── Arrow buttons ────────────────────────────────────── */
-    function rotateCube(sign: number) {
-      btnRemaining = sign * Math.PI / 2;
+    function rotateCube(steps: number) {
+      btnRemaining = steps * Math.PI / 2;
       velX = velY = 0;
       idleBlend = 0;
+      idleTimer = 0;
     }
 
     /* ── Animation loop ───────────────────────────────────── */
     let prevNow = performance.now();
-    let rafId   = 0;
+    let rafId = 0;
 
     function tick() {
+      if (disposed) return;
       rafId = requestAnimationFrame(tick);
       const now = performance.now();
-      const dt  = Math.min((now - prevNow) / 1000, 0.05);
-      prevNow   = now;
+      const dt = Math.min((now - prevNow) / 1000, 0.05);
+      prevNow = now;
 
       if (!dragging) {
         // Inertia
@@ -453,18 +590,20 @@ export default function Landing({ onEnterApp }: Props) {
           applyQuat(new THREE.Vector3(1, 0, 0), velY * dt);
         }
 
-        // Idle drift timer
-        idleTimer += dt;
-        if (idleTimer > IDLE_DELAY) {
-          idleBlend = Math.min(idleBlend + dt / IDLE_RAMP, 1);
-        }
-
-        // Idle drift
-        if (idleBlend > 0) {
-          const drift = 0.0035 * idleBlend;
-          const driftX = 0.0012 * idleBlend;
-          applyQuat(new THREE.Vector3(0, 1, 0), drift);
-          applyQuat(new THREE.Vector3(1, 0, 0), driftX);
+        // Idle drift is disabled for users who request reduced motion.
+        if (!prefersReducedMotionRef.current) {
+          idleTimer += dt;
+          if (idleTimer > IDLE_DELAY) {
+            idleBlend = Math.min(idleBlend + dt / IDLE_RAMP, 1);
+          }
+          if (idleBlend > 0) {
+            const drift = 0.0035 * idleBlend;
+            const driftX = 0.0012 * idleBlend;
+            applyQuat(new THREE.Vector3(0, 1, 0), drift);
+            applyQuat(new THREE.Vector3(1, 0, 0), driftX);
+          }
+        } else {
+          idleBlend = 0;
         }
 
         // Arrow button smooth rotation
@@ -508,57 +647,99 @@ export default function Landing({ onEnterApp }: Props) {
     }
 
     /* ── Font loading + start ─────────────────────────────── */
+    let fontTimeoutId = 0;
+    const fontTimeout = new Promise<void>((resolve) => {
+      fontTimeoutId = window.setTimeout(resolve, 2500);
+    });
     const fontProm = Promise.race([
       Promise.all([
         document.fonts.load("800 100px Poppins"),
         document.fonts.ready,
-      ]),
-      new Promise((r) => setTimeout(r, 2500)),
+      ]).then(() => undefined),
+      fontTimeout,
     ]);
 
-    fontProm.then(() => {
+    void fontProm.then(() => {
+      window.clearTimeout(fontTimeoutId);
+      if (disposed) return;
+      layout();
+      tick();
+    }).catch((error) => {
+      console.warn("PageTrail landing: font loading failed; continuing with fallback fonts.", error);
+      if (disposed) return;
       layout();
       tick();
     });
 
-    // Redraw on font load events
-    document.fonts.addEventListener("loadingdone", () => drawHeadline());
+    function onFontsLoaded() {
+      if (!disposed) drawHeadline();
+    }
+    document.fonts.addEventListener("loadingdone", onFontsLoaded);
 
-    // Resize
-    const ro = new ResizeObserver(layout);
+    // Resize observer recalculates canvas, camera, render targets and headline texture.
+    const ro = new ResizeObserver(() => {
+      if (!disposed) layout();
+    });
     ro.observe(canvas);
 
-    /* ── Expose arrow rotate fn to DOM ───────────────────────── */
-    (canvas as unknown as { _rotateCube?: (n: number) => void })._rotateCube = rotateCube;
+    const canvasWithControls = canvas as HTMLCanvasElement & { _rotateCube?: (n: number) => void };
+    canvasWithControls._rotateCube = rotateCube;
 
     return () => {
+      disposed = true;
+      window.clearTimeout(fontTimeoutId);
       cancelAnimationFrame(rafId);
       ro.disconnect();
+      document.fonts.removeEventListener("loadingdone", onFontsLoaded);
+      canvas.removeEventListener("pointerdown", onPointerDown);
+      canvas.removeEventListener("pointermove", onPointerMove);
+      canvas.removeEventListener("pointerup", endDrag);
+      canvas.removeEventListener("pointercancel", endDrag);
+      canvas.removeEventListener("lostpointercapture", endDrag);
+      canvas.removeEventListener("webglcontextlost", onContextLost);
+      canvas!.classList.remove("dragging");
+      delete canvasWithControls._rotateCube;
+      if (cubeMesh) {
+        spinner.remove(cubeMesh);
+        cubeMesh.geometry.dispose();
+      }
       renderer.dispose();
       rtBack.dispose();
       rtFront.dispose();
       headlineTex?.dispose();
+      bgQuad.geometry.dispose();
       frontMat.dispose();
       backMat.dispose();
       bgMat.dispose();
     };
   }, []);
 
+  function rotateBy(steps: number) {
+    const c = canvasRef.current as (HTMLCanvasElement & { _rotateCube?: (n: number) => void }) | null;
+    c?._rotateCube?.(steps);
+  }
+
   function handlePrev() {
-    const c = canvasRef.current as unknown as { _rotateCube?: (n: number) => void } | null;
-    c?._rotateCube?.(-1);
+    rotateBy(-1);
+    setActiveDot((current) => (current + 2) % 3);
   }
 
   function handleNext() {
-    const c = canvasRef.current as unknown as { _rotateCube?: (n: number) => void } | null;
-    c?._rotateCube?.(1);
+    rotateBy(1);
+    setActiveDot((current) => (current + 1) % 3);
+  }
+
+  function handleDotClick(index: number) {
+    const delta = (index - activeDot + 3) % 3;
+    rotateBy(delta === 2 ? -1 : delta);
+    setActiveDot(index);
   }
 
   return (
     <div className="landing-root">
       <section className="hero" id="hero">
         {/* Three.js canvas */}
-        <canvas id="scene" ref={canvasRef} aria-label="Rotatable glass cube. Drag to rotate." />
+        <canvas id="scene" ref={canvasRef} aria-label="Decorative glass cube. Drag to rotate." />
 
         {/* Loader overlay */}
         <div className="loader" ref={loaderRef}>
@@ -567,16 +748,18 @@ export default function Landing({ onEnterApp }: Props) {
 
         <div className="ui">
           {/* Accessibility headline */}
-          <h1 className="sr-only">Your documents, understood</h1>
+          <h1 className={webglFailed ? "hero-fallback-headline" : "sr-only"}>
+            Your<br />documents<br />understood.
+          </h1>
 
           {/* ── Navbar ── */}
           <header className="nav">
-            <a href="#" className="logo">
-              <i className="logo-mark" />
+            <a href="#hero" className="logo" aria-label="PageTrail home">
+              <i className="logo-mark" aria-hidden="true" />
               <b>Page</b><span>Trail</span>
             </a>
             <ul className="nav-links">
-              <li><a onClick={onEnterApp} style={{ cursor: "pointer" }}>Product</a></li>
+              <li><button type="button" className="nav-action" onClick={onEnterApp}>Product</button></li>
               <li><a href="#features">Features</a></li>
               <li><a href="#how">How it works</a></li>
             </ul>
@@ -597,19 +780,17 @@ export default function Landing({ onEnterApp }: Props) {
           </div>
 
           {/* ── Pagination dots ── */}
-          <nav className="dots" aria-label="Slides">
-            <button className="dot" aria-label="Slide 1" onClick={(e) => {
-              document.querySelectorAll(".dot").forEach(d => d.classList.remove("active"));
-              (e.currentTarget as HTMLButtonElement).classList.add("active");
-            }} />
-            <button className="dot active" aria-label="Slide 2" onClick={(e) => {
-              document.querySelectorAll(".dot").forEach(d => d.classList.remove("active"));
-              (e.currentTarget as HTMLButtonElement).classList.add("active");
-            }} />
-            <button className="dot" aria-label="Slide 3" onClick={(e) => {
-              document.querySelectorAll(".dot").forEach(d => d.classList.remove("active"));
-              (e.currentTarget as HTMLButtonElement).classList.add("active");
-            }} />
+          <nav className="dots" aria-label="Glass cube positions">
+            {[0, 1, 2].map((index) => (
+              <button
+                key={index}
+                type="button"
+                className={`dot ${activeDot === index ? "active" : ""}`}
+                aria-label={`Rotate to position ${index + 1}`}
+                aria-pressed={activeDot === index}
+                onClick={() => handleDotClick(index)}
+              />
+            ))}
           </nav>
 
           {/* ── Tagline ── */}
@@ -627,6 +808,55 @@ export default function Landing({ onEnterApp }: Props) {
             <span className="cta-line" />
             <span className="count" aria-hidden="true">07</span>
           </div>
+        </div>
+      </section>
+
+      <section className="landing-section" id="features" aria-labelledby="features-heading">
+        <div className="landing-section-inner">
+          <p className="section-kicker">One workspace. A clearer trail.</p>
+          <h2 id="features-heading">Make your documents useful.</h2>
+          <p className="section-intro">
+            Bring your files and questions together, then follow answers back to the information behind them.
+          </p>
+          <div className="landing-feature-grid">
+            <article className="landing-feature-card">
+              <span className="feature-index">01 / DOCUMENTS</span>
+              <h3>Ask across your files</h3>
+              <p>Upload PDF, DOCX, TXT, and Markdown files and ask questions in plain language.</p>
+            </article>
+            <article className="landing-feature-card">
+              <span className="feature-index">02 / SOURCES</span>
+              <h3>Keep answers traceable</h3>
+              <p>Use document-aware retrieval to find relevant passages instead of searching files by hand.</p>
+            </article>
+            <article className="landing-feature-card">
+              <span className="feature-index">03 / RESEARCH</span>
+              <h3>Move from files to the web</h3>
+              <p>Bring web search into the same workflow when a question needs information beyond your uploads.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section className="landing-section landing-section--how" id="how" aria-labelledby="how-heading">
+        <div className="landing-section-inner">
+          <p className="section-kicker">A simple workflow</p>
+          <h2 id="how-heading">From upload to understanding.</h2>
+          <div className="landing-steps">
+            <article className="landing-step">
+              <span>01</span>
+              <div><h3>Add your material</h3><p>Upload the documents you want to explore.</p></div>
+            </article>
+            <article className="landing-step">
+              <span>02</span>
+              <div><h3>Ask a real question</h3><p>Describe what you need to understand, compare, or find.</p></div>
+            </article>
+            <article className="landing-step">
+              <span>03</span>
+              <div><h3>Follow the trail</h3><p>Continue the conversation and use retrieved context to guide your next step.</p></div>
+            </article>
+          </div>
+          <button type="button" className="section-cta" onClick={onEnterApp}>Start exploring <span aria-hidden="true">↗</span></button>
         </div>
       </section>
     </div>

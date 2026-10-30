@@ -45,6 +45,8 @@ button {
 }
 
 .sidebar {
+  flex: 0 0 270px;
+  min-width: 0;
   width: 270px;
   height: 100vh;
   max-height: 100vh;
@@ -52,19 +54,20 @@ button {
   display: flex;
   flex-direction: column;
   padding: 13px 10px 11px;
-  flex-shrink: 0;
   overflow: hidden;
   box-sizing: border-box;
   border-right: 1px solid #1c1624;
-  transition: width 0.25s cubic-bezier(0.2, 0, 0, 1),
-    margin-left 0.25s cubic-bezier(0.2, 0, 0, 1),
-    padding 0.25s cubic-bezier(0.2, 0, 0, 1),
+  transition: flex-basis 0.28s cubic-bezier(0.2, 0, 0, 1),
+    width 0.28s cubic-bezier(0.2, 0, 0, 1),
+    padding 0.28s cubic-bezier(0.2, 0, 0, 1),
     opacity 0.2s ease,
-    visibility 0.25s ease;
+    border-color 0.28s ease,
+    visibility 0s linear 0.28s;
 }
 
-/* Desktop open state — explicit rule so toggling back works */
+/* Desktop open — keep the toggle in the main panel reachable. */
 .sidebar--open {
+  flex-basis: 270px;
   width: 270px;
   margin-left: 0;
   padding-left: 10px;
@@ -73,23 +76,39 @@ button {
   visibility: visible;
   pointer-events: auto;
   border-right: 1px solid #1c1624;
+  transition: flex-basis 0.28s cubic-bezier(0.2, 0, 0, 1),
+    width 0.28s cubic-bezier(0.2, 0, 0, 1),
+    padding 0.28s cubic-bezier(0.2, 0, 0, 1),
+    opacity 0.2s ease,
+    border-color 0.28s ease,
+    visibility 0s linear 0s;
 }
 
+/* Desktop closed — never use a negative margin; the main panel fills the space. */
 .sidebar--closed {
-  width: 0 !important;
-  min-width: 0 !important;
-  margin-left: -270px !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-  visibility: hidden !important;
-  border-right: none !important;
+  flex-basis: 0;
+  width: 0;
+  min-width: 0;
+  margin-left: 0;
+  padding-left: 0;
+  padding-right: 0;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  border-right: 0;
 }
 
-/* Backdrop: hidden on desktop, shown only on mobile */
+/* Backdrop: desktop = hidden (no layout footprint).
+   Mobile override is in the @media block below. */
 .sidebar-backdrop {
   display: none;
+  position: fixed;
+  z-index: 9;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(2px);
+  border: 0;
+  cursor: default;
 }
 
 .sidebar-header {
@@ -1593,6 +1612,7 @@ button {
   }
 
   .sidebar-backdrop {
+    display: block;
     position: fixed;
     z-index: 9;
     inset: 0;
