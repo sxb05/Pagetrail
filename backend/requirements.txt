@@ -31,6 +31,8 @@ docx2txt
 
 # Safety & Environment Configuration
 guardrails-ai
+guardrails-ai-detect-jailbreak
+guardrails-ai-detect-pii
 python-dotenv
 
 # UI Framework

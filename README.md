@@ -259,7 +259,7 @@ source .venv/bin/activate
 python -m pip install -r backend/requirements.txt
 ```
 
-The backend requirements include the Guardrails safety dependencies, PostgreSQL connection pool, and `pytest` used by the focused test suite.
+The backend requirements include the Guardrails safety validators, PostgreSQL connection pool, and `pytest` used by the focused test suite. The Docker image downloads the jailbreak detector's local model during the image build.
 
 ### 3. Install frontend dependencies
 
@@ -388,6 +388,7 @@ Common checks:
 
 - **Startup/database failure:** inspect Render logs, database URL/credentials, PostgreSQL connectivity, and schema initialization.
 - **Embedding initialization failure:** verify `GEMINI_API_KEY` is configured in the backend environment.
+- **Guardrails import or model failure:** reinstall from `backend/requirements.txt`; the production Docker build also runs the jailbreak detector's model setup step.
 - **Web search failure:** verify `tools.py` loads the configured `TAVILY_API_KEY` rather than a placeholder.
 - **Frontend routing/build issue:** confirm `frontend/dist` exists for the production container and that the correct asset paths are served.
 - **Data-isolation regression:** rerun the isolation tests and add PostgreSQL integration tests for changes that touch identity, retrieval, or checkpoint configuration.
