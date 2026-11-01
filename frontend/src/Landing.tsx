@@ -143,9 +143,11 @@ const bgFragShader = /* glsl */ `
 
 interface Props {
   onEnterApp: () => void;
+  onLogin: () => void;
+  onSignup: () => void;
 }
 
-export default function Landing({ onEnterApp }: Props) {
+export default function Landing({ onEnterApp, onLogin, onSignup }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const loaderRef = useRef<HTMLDivElement>(null);
   const [webglFailed, setWebglFailed] = useState(false);
@@ -766,6 +768,8 @@ export default function Landing({ onEnterApp }: Props) {
               <li><button type="button" className="nav-action" onClick={onEnterApp}>Product</button></li>
               <li><a href="#features">Features</a></li>
               <li><a href="#how">How it works</a></li>
+              <li><button type="button" className="nav-action" onClick={onLogin}>Log in</button></li>
+              <li><button type="button" className="nav-action" onClick={onSignup}>Sign up</button></li>
             </ul>
           </header>
 

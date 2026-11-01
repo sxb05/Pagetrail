@@ -28,6 +28,23 @@ type UploadedDoc = {
   size?: number;
 };
 
+type AppRoute = "landing" | "login" | "signup" | "app" | "not-found";
+
+function routeForPath(pathname: string): AppRoute {
+  if (pathname === "/") return "landing";
+  if (pathname === "/login") return "login";
+  if (pathname === "/signup") return "signup";
+  if (pathname === "/app" || pathname.startsWith("/chat/")) return "app";
+  return "not-found";
+}
+
+function protectedRedirect(): string {
+  const redirect = new URLSearchParams(window.location.search).get("redirect");
+  return redirect && (redirect === "/app" || redirect.startsWith("/chat/"))
+    ? redirect
+    : "/app";
+}
+
 function formatFileSize(bytes?: number): string {
   if (bytes === undefined || bytes === null || isNaN(bytes)) return "";
   if (bytes < 1024) return `${bytes} B`;
@@ -248,15 +265,19 @@ function AuthPage({ error, isRegisterMode, onModeChange, onSubmit }: AuthPagePro
 }
 
 function App() {
-  // Show landing page first, then auth, then the main app
-  const [showLanding, setShowLanding] = useState<boolean>(() => {
-    // Show the public landing page on a normal visit, even for returning users.
-    // Preserve direct shared-conversation links so they can open the app directly.
-    return !new URLSearchParams(window.location.search).has("conversation");
-  });
-
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
     return !!localStorage.getItem("access_token");
+  });
+  const [route, setRoute] = useState<AppRoute>(() => {
+    const path = window.location.pathname;
+    if (
+      path === "/" &&
+      new URLSearchParams(window.location.search).has("conversation") &&
+      localStorage.getItem("access_token")
+    ) {
+      return "app";
+    }
+    return routeForPath(path);
   });
 
   const [username, setUsername] = useState<string>(() => {
@@ -301,12 +322,13 @@ function App() {
     localStorage.setItem("sidebar_open", "false");
   };
 
+  const navigate = (path: string) => {
+    window.history.pushState(null, "", path);
+    setRoute(routeForPath(path));
+  };
+
   const enterApp = () => {
-    // Remove a landing-page anchor hash before switching to the chat/auth UI.
-    if (window.location.hash) {
-      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-    }
-    setShowLanding(false);
+    navigate(isLoggedIn ? "/app" : "/login");
   };
 
   const authenticatedFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -323,9 +345,10 @@ function App() {
     const target = e.currentTarget as HTMLFormElement;
     const userVal = (target.elements.namedItem("username") as HTMLInputElement).value;
     const password = (target.elements.namedItem("password") as HTMLInputElement).value;
+    const registering = route === "signup" || isRegisterMode;
 
     try {
-      if (isRegisterMode) {
+      if (registering) {
         const registrationResponse = await fetch("/api/auth/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -363,6 +386,7 @@ function App() {
       setUsername(userVal);
       setIsLoggedIn(true);
       setIsRegisterMode(false);
+      navigate(protectedRedirect());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed.");
     }
@@ -371,7 +395,7 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem("access_token");
     setIsLoggedIn(false);
-    setShowLanding(true);
+    navigate("/");
     setConversations([]);
     setMessages([]);
     setThreadId(null);
@@ -379,6 +403,14 @@ function App() {
     setPendingFiles([]);
     setAccountMenuOpen(false);
   };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setRoute(routeForPath(window.location.pathname));
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -404,6 +436,12 @@ function App() {
       void selectConversation(sharedThreadId);
     }
   }, [conversations, isLoggedIn]);
+
+  useEffect(() => {
+    if (route === "app" && !isLoggedIn) {
+      navigate(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+    }
+  }, [route, isLoggedIn]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -661,21 +699,54 @@ function App() {
     }
   }
 
-  if (showLanding) {
-    return <Landing onEnterApp={enterApp} />;
+  if (route === "landing") {
+    return (
+      <Landing
+        onEnterApp={enterApp}
+        onLogin={() => navigate("/login")}
+        onSignup={() => navigate("/signup")}
+      />
+    );
   }
 
-  if (!isLoggedIn) {
+  if (route === "login" || route === "signup") {
     return (
       <AuthPage
         error={error}
-        isRegisterMode={isRegisterMode}
+        isRegisterMode={route === "signup" || isRegisterMode}
         onModeChange={(registerMode) => {
           setIsRegisterMode(registerMode);
           setError("");
+          navigate(registerMode ? "/signup" : "/login");
         }}
         onSubmit={handleAuthSubmit}
       />
+    );
+  }
+
+  if (route === "app" && !isLoggedIn) {
+    return <main aria-busy="true">Checking authentication…</main>;
+  }
+
+  if (route === "not-found") {
+    return (
+      <main className="login-page">
+        <section className="login-card">
+          <div className="login-brand">
+            <span className="brand-mark"><BrandLogo size={18} /></span>
+            <span>Pagetrail</span>
+          </div>
+          <div className="login-heading">
+            <p className="login-eyebrow">Page not found</p>
+            <h1>That trail ends here.</h1>
+            <p>The page you requested does not exist.</p>
+          </div>
+          <button className="login-button" type="button" onClick={() => navigate("/")}>
+            <span>Back to Pagetrail</span>
+            <ArrowUp size={17} />
+          </button>
+        </section>
+      </main>
     );
   }
 
