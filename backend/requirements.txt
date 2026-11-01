@@ -22,11 +22,16 @@ langchainhub==0.1.21
 SQLAlchemy==2.0.52
 langgraph-checkpoint-postgres
 psycopg[binary]
+psycopg-pool
 pgvector
 
 # Document Parsing & Storage
 pypdf
 docx2txt
+
+# Safety & Environment Configuration
+guardrails-ai
+python-dotenv
 
 # UI Framework
 streamlit==1.63.0
@@ -35,3 +40,6 @@ uvicorn
 python-multipart
 pydantic==2.13.5
 pydantic-settings
+
+# Test dependencies
+pytest

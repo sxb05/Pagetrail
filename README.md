@@ -65,7 +65,8 @@ PageTrail is a full-stack AI application built with **FastAPI, React, TypeScript
 | Vector representation | `pgvector` `Vector(3072)` column; JSON embedding field is also retained |
 | Document parsing | `pypdf`, `docx2txt`, text/Markdown file reading |
 | Web search | Tavily tool integration |
-| State persistence | LangGraph PostgreSQL checkpointer |
+| State persistence | LangGraph PostgreSQL checkpointer and `psycopg-pool` |
+| Input/output safety | Guardrails AI jailbreak and PII checks |
 | Hosting | Render |
 | Local containers | Docker, Docker Compose, Redis service |
 
@@ -219,6 +220,7 @@ Pagetrail/
 - Python 3.11 or newer
 - Node.js and npm
 - A Supabase PostgreSQL project
+- The PostgreSQL `vector` extension enabled in that project
 - A Google Gemini API key
 - A Tavily API key for web search (after verifying environment loading in the tool)
 - Docker and Docker Compose for the containerized workflow
@@ -246,7 +248,7 @@ Or create a virtual environment from the repository root:
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r .\backend\requirements.txt
+python -m pip install -r .\backend\requirements.txt
 ```
 
 Linux/macOS:
@@ -254,8 +256,10 @@ Linux/macOS:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r backend/requirements.txt
+python -m pip install -r backend/requirements.txt
 ```
+
+The backend requirements include the Guardrails safety dependencies, PostgreSQL connection pool, and `pytest` used by the focused test suite.
 
 ### 3. Install frontend dependencies
 
@@ -307,7 +311,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30
 CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 ```
 
-Get the database connection URI from **Supabase Dashboard → Project Settings → Database → Connection string**. URL-encode special characters in the password if you assemble the URI manually. For hosted deployments, set environment variables through the hosting provider's configuration rather than committing them.
+Enable the `vector` extension in the target PostgreSQL database before the first startup. Get the database connection URI from **Supabase Dashboard → Project Settings → Database → Connection string**. URL-encode special characters in the password if you assemble the URI manually. For hosted deployments, set environment variables through the hosting provider's configuration rather than committing them.
 
 ## Run locally
 
