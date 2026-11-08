@@ -10,7 +10,6 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import SQLAlchemyError
 
-
 # Load environment variables before importing application modules.
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(PROJECT_ROOT / ".env")
@@ -26,7 +25,6 @@ from app.core.paths import (  # noqa: E402
 )
 from app.db.session import init_db  # noqa: E402
 from app.services.rag import init_rag_db  # noqa: E402
-
 
 logger = logging.getLogger(__name__)
 
@@ -63,10 +61,7 @@ async def sqlalchemy_error_handler(
     return JSONResponse(
         status_code=503,
         content={
-            "detail": (
-                "The database is temporarily unavailable. "
-                "Please try again."
-            )
+            "detail": ("The database is temporarily unavailable. " "Please try again.")
         },
     )
 
@@ -177,7 +172,7 @@ if FRONTEND_DIST.exists():
 if __name__ == "__main__":
     uvicorn.run(
         "app.main:app",
-        host="127.0.0.1",
-        port=8000,
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", "10000")),
         reload=True,
     )

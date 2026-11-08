@@ -22,9 +22,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # on first request.  On hosting plans with ≤ 512 MB RAM (e.g. Render free
 # tier) set PAGETRAIL_GUARDRAILS=false in the service's environment
 # variables to skip the transformer models while keeping regex checks active.
-# Default here is "true" so that production / higher-memory deploys get
-# full ML-based safety by default.
-ENV PAGETRAIL_GUARDRAILS=true
+# Default to regex-only safety so the container can start on Render's
+# 512 MB tier. Set PAGETRAIL_GUARDRAILS=true on higher-memory deployments
+# to enable the transformer-based checks.
+ENV PAGETRAIL_GUARDRAILS=false
 
 WORKDIR /app
 

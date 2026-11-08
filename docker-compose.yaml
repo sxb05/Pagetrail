@@ -8,8 +8,9 @@ services:
       - .env
     environment:
       PYTHONPATH: /app/backend
+      PORT: ${PORT:-10000}
     ports:
-      - "8000:8000"
+      - "${PORT:-10000}:${PORT:-10000}"
     depends_on:
       redis:
         condition: service_healthy
@@ -19,7 +20,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')",
+          "import os, urllib.request; urllib.request.urlopen(f\"http://127.0.0.1:{os.getenv('PORT', '10000')}/api/health\")",
         ]
       interval: 30s
       timeout: 5s
