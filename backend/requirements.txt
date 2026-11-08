@@ -30,18 +30,22 @@ pypdf
 docx2txt
 
 # Safety & Environment Configuration
+# guardrails-ai ML models consume ~350 MB RAM.
+# Set PAGETRAIL_GUARDRAILS=false in Render/hosting env vars to disable
+# the transformer-based jailbreak and PII models on memory-constrained
+# instances (≤ 512 MB).  Regex-based checks remain active regardless.
 guardrails-ai
 guardrails-ai-detect-jailbreak
 guardrails-ai-detect-pii
 python-dotenv
 
-# UI Framework
-streamlit==1.63.0
+# Web API framework
 fastapi
-uvicorn
+uvicorn[standard]
 python-multipart
 pydantic==2.13.5
 pydantic-settings
 
 # Test dependencies
 pytest
+httpx

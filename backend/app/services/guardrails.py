@@ -15,6 +15,24 @@ class GuardrailsUnavailableError(RuntimeError):
     """Raised when a safety check cannot run reliably."""
 
 
+# ---------------------------------------------------------------------------
+# Feature flag: set PAGETRAIL_GUARDRAILS=false to disable the ML-based
+# jailbreak and PII models (regex-only mode).  Recommended on hosting plans
+# with ≤ 512 MB RAM (e.g. Render free / starter tier) because the
+# transformer models consume ~300–400 MB on first use.
+# ---------------------------------------------------------------------------
+_ML_ENABLED = os.getenv("PAGETRAIL_GUARDRAILS", "true").lower() not in {
+    "0", "false", "no", "off"
+}
+
+EXPLICIT_JAILBREAK_PATTERNS = [
+    r"\bignore\s+(?:all\s+)?(?:the\s+)?(?:previous|prior|above|earlier|all)\s+instructions?\b",
+    r"\b(?:disregard|override)\s+(?:all\s+)?(?:the\s+)?(?:previous|prior|above|earlier)\s+instructions?\b",
+    r"\b(?:reveal|show|print|display|expose|leak)\s+(?:your\s+)?(?:hidden\s+)?(?:system|developer)\s+(?:prompt|instructions?)\b",
+    r"\b(?:bypass|disable|circumvent)\s+(?:the\s+)?(?:safety|security)\s+(?:rules?|filters?|guardrails?)\b",
+]
+
+
 @lru_cache(maxsize=1)
 def _jailbreak_guard() -> Guard:
     return Guard().use(
@@ -23,12 +41,7 @@ def _jailbreak_guard() -> Guard:
             on_fail="noop",
         )
     )
-EXPLICIT_JAILBREAK_PATTERNS = [
-    r"\bignore\s+(?:all\s+)?(?:the\s+)?(?:previous|prior|above|earlier|all)\s+instructions?\b",
-    r"\b(?:disregard|override)\s+(?:all\s+)?(?:the\s+)?(?:previous|prior|above|earlier)\s+instructions?\b",
-    r"\b(?:reveal|show|print|display|expose|leak)\s+(?:your\s+)?(?:hidden\s+)?(?:system|developer)\s+(?:prompt|instructions?)\b",
-    r"\b(?:bypass|disable|circumvent)\s+(?:the\s+)?(?:safety|security)\s+(?:rules?|filters?|guardrails?)\b",
-]
+
 
 @lru_cache(maxsize=1)
 def _pii_guard() -> Guard:
@@ -40,17 +53,22 @@ def _pii_guard() -> Guard:
         )
     )
 
+
 def _has_explicit_jailbreak(message: str) -> bool:
     return any(
         re.search(pattern, message, flags=re.IGNORECASE)
         for pattern in EXPLICIT_JAILBREAK_PATTERNS
     )
 
+
 def _check_jailbreak(text: str) -> bool:
     """
     Return True when the detector considers the text safe.
+    Skipped (returns True) when PAGETRAIL_GUARDRAILS=false.
     Raise an error if the detector itself fails.
     """
+    if not _ML_ENABLED:
+        return True
     try:
         result = _jailbreak_guard().validate(text)
         return bool(result.validation_passed)
@@ -58,7 +76,6 @@ def _check_jailbreak(text: str) -> bool:
         raise GuardrailsUnavailableError(
             "The jailbreak safety check could not run."
         ) from exc
-
 
 
 def validate_user_input(message: str) -> str:
@@ -78,7 +95,7 @@ def validate_user_input(message: str) -> str:
 
     # Avoid classifier false positives on very short messages.
     # The explicit checks above still run for these messages.
-    if len(message.split()) >= 4 and not _check_jailbreak(message):
+    if _ML_ENABLED and len(message.split()) >= 4 and not _check_jailbreak(message):
         raise InputBlockedError(
             "The message was blocked by PageTrail's safety checks."
         )
@@ -88,6 +105,8 @@ def validate_user_input(message: str) -> str:
 
 def contains_jailbreak(text: str) -> bool:
     """Return whether retrieved text is flagged as a possible jailbreak."""
+    if not _ML_ENABLED:
+        return _has_explicit_jailbreak(text)
     return not _check_jailbreak(text)
 
 
@@ -97,7 +116,11 @@ def sanitize_assistant_output(text: str) -> str:
 
     Set PAGETRAIL_REDACT_PII=false to preserve these values when
     extracting contact details from user documents is intentional.
+    Skipped entirely when PAGETRAIL_GUARDRAILS=false.
     """
+    if not _ML_ENABLED:
+        return text
+
     redact_pii = os.getenv("PAGETRAIL_REDACT_PII", "true").lower()
 
     if redact_pii in {"0", "false", "no", "off"}:
@@ -126,3 +149,4 @@ def sanitize_assistant_output(text: str) -> str:
     raise GuardrailsUnavailableError(
         "The output could not be safely validated."
     )
+

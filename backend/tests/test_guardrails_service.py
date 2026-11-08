@@ -19,6 +19,14 @@ def test_safe_message_is_accepted(monkeypatch):
 
 
 def test_flagged_message_is_rejected(monkeypatch):
+    """The ML jailbreak classifier blocks a flagged message.
+
+    Skipped when PAGETRAIL_GUARDRAILS=false because the ML check is
+    intentionally bypassed in that mode — regex checks still run.
+    """
+    if not service._ML_ENABLED:
+        pytest.skip("PAGETRAIL_GUARDRAILS=false: ML classifier is disabled.")
+
     monkeypatch.setattr(
         service, "_check_jailbreak", lambda text: False
     )
@@ -35,6 +43,14 @@ def test_empty_message_is_rejected():
 
 
 def test_output_uses_validated_text(monkeypatch):
+    """The PII guard replaces detected addresses in assistant output.
+
+    Skipped when PAGETRAIL_GUARDRAILS=false because
+    sanitize_assistant_output returns input unmodified in that mode.
+    """
+    if not service._ML_ENABLED:
+        pytest.skip("PAGETRAIL_GUARDRAILS=false: PII guard is disabled.")
+
     monkeypatch.setenv("PAGETRAIL_REDACT_PII", "true")
 
     fake_result = SimpleNamespace(
