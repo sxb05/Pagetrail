@@ -33,11 +33,12 @@ COPY backend/requirements.txt ./backend/requirements.txt
 
 RUN pip install --no-cache-dir -r backend/requirements.txt
 
-# Download ML detector weights only when ML guardrails are explicitly enabled.
-# Keep the low-memory Render build free of unused model artifacts and setup work.
-RUN case "$(printf '%s' "$PAGETRAIL_GUARDRAILS" | tr '[:upper:]' '[:lower:]')" in \
+# Optional image-build switch for deployments that need ML detectors pre-cached.
+# Render runtime environment variables are not available during Docker build.
+ARG PAGETRAIL_GUARDRAILS_BUILD=false
+RUN case "$(printf '%s' "$PAGETRAIL_GUARDRAILS_BUILD" | tr '[:upper:]' '[:lower:]')" in \
       true|1|yes|on) python -m guardrails_ai.detect_jailbreak.post_install ;; \
-      *) echo "Skipping Guardrails model download (ML guardrails disabled)" ;; \
+      *) echo "Skipping Guardrails model download (build-time ML flag disabled)" ;; \
     esac
 
 COPY backend ./backend

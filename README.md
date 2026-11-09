@@ -159,7 +159,8 @@ Pagetrail/
 │   ├── requirements.txt
 │   └── tests/
 │       ├── test_user_isolation.py
-│       └── test_document_routes.py
+│       ├── test_document_routes.py
+│       └── test_startup_safety.py
 ├── frontend/
 │   ├── src/
 │   │   ├── App.tsx            # Main chat app (auth-gated)
@@ -338,8 +339,11 @@ python -m pytest backend/tests/test_user_isolation.py -v
 # Document routes (4 tests)
 python -m pytest backend/tests/test_document_routes.py -v
 
-# All backend tests
-$env:PYTHONPATH="backend"; python -m pytest backend/tests -v
+# Startup and health-check regression tests
+python -m pytest backend/tests/test_startup_safety.py -v
+
+# All backend tests (run with lightweight regex-only guardrails)
+$env:PYTHONPATH="backend"; $env:PAGETRAIL_GUARDRAILS="false"; python -m pytest backend/tests -v
 ```
 
 ## Deployment and troubleshooting
@@ -353,7 +357,8 @@ PageTrail is hosted at [pagetrail.onrender.com](https://pagetrail.onrender.com).
 3. Set all required environment variables in the hosting dashboard.
 4. **On Render free/starter (512 MB RAM): set `PAGETRAIL_GUARDRAILS=false`** — see below.
 5. Verify database connectivity and confirm `pgvector` is enabled.
-6. Check startup logs and `GET /api/health`.
+6. Configure Render's health-check path as `/health/live`.
+7. After deployment, verify `/health/ready` returns `200` when Supabase is reachable.
 
 ### Common failures
 
