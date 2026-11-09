@@ -26,3 +26,35 @@ def test_guardrails_module_does_not_import_ml_detectors_when_disabled():
         cwd=Path(__file__).resolve().parents[2],
         timeout=20,
     )
+
+
+
+def test_liveness_and_readiness_are_separate_without_database_config():
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1])
+    for name in (
+        "DATABASE_URL",
+        "DATABASE_ADMIN_URL",
+        "DATABASE_HOST",
+        "DATABASE_NAME",
+        "DATABASE_USERNAME",
+        "DATABASE_PASSWORD",
+    ):
+        env.pop(name, None)
+
+    code = (
+        "from fastapi.testclient import TestClient; "
+        "from app.main import app; "
+        "client = TestClient(app); "
+        "assert client.get('/health/live').status_code == 200; "
+        "assert client.get('/api/health').status_code == 200; "
+        "assert client.get('/health/ready').status_code == 503"
+    )
+
+    subprocess.run(
+        [sys.executable, "-c", code],
+        check=True,
+        env=env,
+        cwd=Path(__file__).resolve().parents[2],
+        timeout=30,
+    )

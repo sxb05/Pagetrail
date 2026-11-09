@@ -35,11 +35,10 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 
 # Download ML detector weights only when ML guardrails are explicitly enabled.
 # Keep the low-memory Render build free of unused model artifacts and setup work.
-RUN if [ "$PAGETRAIL_GUARDRAILS" = "true" ]; then \
-      python -m guardrails_ai.detect_jailbreak.post_install; \
-    else \
-      echo "Skipping Guardrails model download (PAGETRAIL_GUARDRAILS=false)"; \
-    fi
+RUN case "$(printf '%s' "$PAGETRAIL_GUARDRAILS" | tr '[:upper:]' '[:lower:]')" in \
+      true|1|yes|on) python -m guardrails_ai.detect_jailbreak.post_install ;; \
+      *) echo "Skipping Guardrails model download (ML guardrails disabled)" ;; \
+    esac
 
 COPY backend ./backend
 
