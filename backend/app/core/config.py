@@ -1,4 +1,3 @@
-from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.paths import REPO_ROOT
@@ -11,22 +10,28 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    DATABASE_URL: str | None = Field(default=None)
-    DATABASE_ADMIN_URL: str | None = Field(default=None)
-    DATABASE_HOST: str
-    DATABASE_PORT: str
-    DATABASE_NAME: str
-    DATABASE_USERNAME: str
-    DATABASE_PASSWORD: str
-    SECRET_KEY: str | None = Field(default=None)
+    # A full DATABASE_URL is sufficient. Discrete fields remain supported for
+    # deployments that construct the URL from individual credentials.
+    DATABASE_URL: str | None = None
+    DATABASE_ADMIN_URL: str | None = None
+    DATABASE_HOST: str | None = None
+    DATABASE_PORT: int = 5432
+    DATABASE_NAME: str | None = None
+    DATABASE_USERNAME: str | None = None
+    DATABASE_PASSWORD: str | None = None
+
+    SECRET_KEY: str | None = None
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    GEMINI_API_KEY: str
-    TAVILY_API_KEY: str
-    SUPABASE_URL: str
-    SUPABASE_PUBLISHABLE_KEY: str
-    SUPABASE_SECRET_KEY: str
-    SUPABASE_JWKS_URL: str
+
+    # These integrations are used by individual features, not by the web
+    # server's import/startup path. Missing keys should not stop port binding.
+    GEMINI_API_KEY: str | None = None
+    TAVILY_API_KEY: str | None = None
+    SUPABASE_URL: str | None = None
+    SUPABASE_PUBLISHABLE_KEY: str | None = None
+    SUPABASE_SECRET_KEY: str | None = None
+    SUPABASE_JWKS_URL: str | None = None
 
 
 settings = Settings()

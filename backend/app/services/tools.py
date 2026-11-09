@@ -2,10 +2,9 @@
 from langchain_tavily import TavilySearch
 from langchain_core.tools import tool
 from langgraph.prebuilt import ToolRuntime
+from app.core.config import settings
 from app.db.session import save_memory, search_memory
 from app.services.rag import retrieve_documents
-
-TAVILY_API_KEY = "TAVILY_API_KEY"
 
 
 def _get_request_identity(runtime: ToolRuntime) -> tuple[str, int]:
@@ -26,7 +25,11 @@ def _get_request_identity(runtime: ToolRuntime) -> tuple[str, int]:
 @tool
 def web_search(query: str, num_results: int = 5):
     """Perform a web search using Tavily and return the top results."""
-    tavily = TavilySearch(api_key=TAVILY_API_KEY)
+    if not settings.TAVILY_API_KEY:
+        raise RuntimeError(
+            "Web search is not configured: TAVILY_API_KEY is missing."
+        )
+    tavily = TavilySearch(api_key=settings.TAVILY_API_KEY)
     return tavily.search(query, num_results=num_results)
 
 

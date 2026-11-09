@@ -260,7 +260,7 @@ PAGETRAIL_GUARDRAILS=true
 uvicorn app.main:app --reload --app-dir backend
 ```
 
-Health endpoint: `http://127.0.0.1:8000/api/health`
+Health endpoints: `http://127.0.0.1:8000/health/live` and `http://127.0.0.1:8000/health/ready` (the legacy `/api/health` path remains available).
 
 ### Frontend
 
@@ -288,6 +288,46 @@ Open `http://localhost:8000`. To stop:
 ```powershell
 docker compose down
 ```
+
+
+
+## Database initialization and Render deployment
+
+PageTrail deliberately does **not** run schema DDL in the FastAPI startup hook. Uvicorn can bind to Render's assigned port without waiting for Supabase migrations, and a database outage is reported by readiness checks instead of preventing the HTTP listener from starting.
+
+Run the schema initializer once for a fresh database, and again when a release includes database/schema changes. It is safe to rerun: it creates missing tables and applies the existing additive column/RLS setup; it does not drop tables or delete application records.
+
+From the repository root on Windows PowerShell:
+
+```powershell
+$env:PYTHONPATH="backend"
+python -m app.scripts.init_database
+```
+
+From the repository root on Linux/macOS:
+
+```bash
+PYTHONPATH=backend python -m app.scripts.init_database
+```
+
+For a deployed Render Docker service, run this from the service Shell:
+
+```bash
+python -m app.scripts.init_database
+```
+
+The command uses the configured `DATABASE_ADMIN_URL` when present, otherwise the existing `DATABASE_URL` fallback. It first verifies that the PostgreSQL `vector` extension is enabled, creates `rag_documents`, then creates the application tables and applies the current additive setup. It logs and exits non-zero on any failure; it never suppresses migration errors.
+
+**Deployment sequence:** run the database command before switching traffic to a release that requires schema changes. If the Render plan/service supports a pre-deploy command, configure `python -m app.scripts.init_database` there. Otherwise run it manually from the Render Shell before deploying that release. Do not put it back in the Uvicorn CMD or FastAPI lifespan.
+
+### Health endpoints
+
+- `GET /health/live` (also available at the backwards-compatible `GET /api/health`) confirms that the HTTP process is running and does not require PostgreSQL.
+- `GET /health/ready` runs a bounded `SELECT 1` against PostgreSQL and returns HTTP 503 when the database cannot be reached.
+
+Use `/health/live` as Render's process/port health-check path so a temporary database outage does not get mistaken for a server that failed to bind its port. Use `/health/ready` when you specifically need to confirm database readiness.
+
+The application connection pool is intentionally small for low-memory hosting, and PostgreSQL connection establishment is bounded by a five-second timeout.
 
 ## Tests
 
@@ -320,7 +360,7 @@ PageTrail is hosted at [pagetrail.onrender.com](https://pagetrail.onrender.com).
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | OOM crash at startup / `used over 512Mi` | Guardrails ML models load ~350 MB | Set `PAGETRAIL_GUARDRAILS=false` in Render env vars |
-| No open port detected | App crashed before binding | Check logs; usually OOM or missing env var |
+| No open port detected | Import/startup exception, container OOM, or a blocking startup hook | Inspect the first traceback/OOM message; verify required database settings and keep schema initialization out of FastAPI startup |
 | Embedding failure | `GEMINI_API_KEY` missing | Add to hosting env |
 | Web search failure | `TAVILY_API_KEY` not loaded | Verify env var and `tools.py` |
 | Frontend 503 | `frontend/dist` missing | Rebuild Docker image |
@@ -328,15 +368,17 @@ PageTrail is hosted at [pagetrail.onrender.com](https://pagetrail.onrender.com).
 
 ## Memory and OOM fix
 
-**Root cause:** The `guardrails-ai` jailbreak detector uses a transformer model (~350 MB). Loading it pushes a Render free-tier instance (512 MB limit) over the limit before the app can bind a port, producing the `No open ports detected` / `used over 512Mi` log pattern.
+**Memory note:** The optional Guardrails ML detectors can consume substantial memory when first invoked. They are now imported lazily, so with `PAGETRAIL_GUARDRAILS=false` the detector packages are not imported into the web process during startup. On a 512 MB instance, keep the flag set to false. Explicit regex jailbreak checks remain active; ML jailbreak classification and ML-based PII redaction are skipped.
 
-**Fix — set one environment variable in the Render dashboard:**
+This memory issue can cause an out-of-memory termination if ML detectors are enabled on a small instance, but it should not be assumed to be the cause of every `No open ports detected` deployment. Confirm the first Render error or `used over 512Mi` message in the deployment logs.
+
+**Recommended setting for a 512 MB instance:**
 
 ```
 PAGETRAIL_GUARDRAILS=false
 ```
 
-This skips the ML-based jailbreak and PII transformer models. The regex-based jailbreak patterns (`ignore all previous instructions`, `reveal your system prompt`, etc.) **remain active regardless** of this setting. The tradeoff is reduced coverage of novel/obfuscated jailbreak attempts.
+With the lazy imports, this also avoids importing the ML detector libraries during application startup. The regex-based jailbreak patterns (`ignore all previous instructions`, `reveal your system prompt`, etc.) **remain active regardless** of this setting. The tradeoff is reduced coverage of novel/obfuscated jailbreak attempts and no ML-based PII redaction.
 
 For production deployments on plans with ≥ 1 GB RAM, keep `PAGETRAIL_GUARDRAILS=true` (the default) to retain full ML-based safety.
 

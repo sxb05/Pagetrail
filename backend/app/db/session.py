@@ -17,10 +17,30 @@ def _looks_like_database_url(value: str) -> bool:
 
 
 def _database_url() -> URL:
-    # Build from discrete fields so passwords with @, &, :, / stay unparsed as host.
-    if settings.DATABASE_URL and _looks_like_database_url(settings.DATABASE_URL):
-        parsed_url = make_url(settings.DATABASE_URL.strip())
-        return parsed_url.set(drivername="postgresql+psycopg")
+    if settings.DATABASE_URL:
+        if not _looks_like_database_url(settings.DATABASE_URL):
+            raise ValueError(
+                "DATABASE_URL must be a PostgreSQL connection URL."
+            )
+        return make_url(settings.DATABASE_URL.strip()).set(
+            drivername="postgresql+psycopg"
+        )
+
+    # Build from discrete fields so special characters in the password are
+    # passed as a password value, not parsed as URL syntax.
+    required = {
+        "DATABASE_HOST": settings.DATABASE_HOST,
+        "DATABASE_NAME": settings.DATABASE_NAME,
+        "DATABASE_USERNAME": settings.DATABASE_USERNAME,
+        "DATABASE_PASSWORD": settings.DATABASE_PASSWORD,
+    }
+    missing = [name for name, value in required.items() if not value]
+    if missing:
+        raise ValueError(
+            "Database configuration is incomplete. Set DATABASE_URL or all "
+            "of these fields: " + ", ".join(missing)
+        )
+
     return URL.create(
         drivername="postgresql+psycopg",
         username=settings.DATABASE_USERNAME,
@@ -51,9 +71,12 @@ def _database_admin_url() -> URL:
 
 
 def _connect_args_for(url: URL) -> dict:
-    if url.host and url.host != "localhost":
-        return {"sslmode": "require"}
-    return {}
+    # Bound connection establishment so health checks and API requests do not
+    # hang indefinitely when the hosted PostgreSQL service is unreachable.
+    args = {"connect_timeout": 5}
+    if url.host and url.host not in {"localhost", "127.0.0.1"}:
+        args["sslmode"] = "require"
+    return args
 
 
 admin_database_url = _database_admin_url()
@@ -62,6 +85,10 @@ admin_database_url = _database_admin_url()
 engine = create_engine(
     database_url,
     pool_pre_ping=True,
+    pool_size=2,
+    max_overflow=0,
+    pool_timeout=5,
+    pool_recycle=1800,
     connect_args=_connect_args_for(database_url),
 )
 
@@ -69,6 +96,10 @@ engine = create_engine(
 admin_engine = create_engine(
     admin_database_url,
     pool_pre_ping=True,
+    pool_size=1,
+    max_overflow=0,
+    pool_timeout=5,
+    pool_recycle=1800,
     connect_args=_connect_args_for(admin_database_url),
 )
 

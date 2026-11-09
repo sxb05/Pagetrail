@@ -38,7 +38,10 @@ rag_documents = Table(
 )
 
 def init_rag_db() -> None:
-    metadata.create_all(bind=admin_engine)
+    """Create the RAG table during the explicit database migration step."""
+    with admin_engine.begin() as connection:
+        connection.exec_driver_sql("SET LOCAL statement_timeout = '30s'")
+        metadata.create_all(bind=connection)
 
 
 def read_pdf(file_path: str) -> str:
