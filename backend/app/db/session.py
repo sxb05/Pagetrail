@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 def _database_is_configured() -> bool:
-    if settings.DATABASE_URL:
-        return _looks_like_database_url(settings.DATABASE_URL)
+    if settings.DATABASE_URL and _looks_like_database_url(settings.DATABASE_URL):
+        return True
     return all(
         (
             settings.DATABASE_HOST,
