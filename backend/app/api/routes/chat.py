@@ -27,7 +27,6 @@ from app.db.session import (
     list_conversations,
     save_chat_message,
 )
-from app.services.agent import get_agent
 from app.services.rag import (
     add_document_to_vector_store,
     rag_documents,
@@ -222,6 +221,10 @@ def chat(request: ChatRequest, current_user: CurrentUser) -> dict[str, str]:
 
         # 5. Generate an answer only if context screening didn't block it.
         if answer is None:
+            # LangGraph, the chat-model provider, and the PostgreSQL
+            # checkpointer are needed only for an actual chat request.
+            from app.services.agent import get_agent
+
             agent = get_agent(request.model)
 
             checkpoint_thread_id = build_checkpoint_thread_id(

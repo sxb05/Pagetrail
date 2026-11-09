@@ -1,5 +1,6 @@
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
@@ -23,8 +24,6 @@ from app.core.paths import (  # noqa: E402
     FRONTEND_DIR,
     FRONTEND_PUBLIC,
 )
-from app.db.session import init_db  # noqa: E402
-from app.services.rag import init_rag_db  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +36,15 @@ cors_origins = [
     if origin.strip()
 ]
 
-app = FastAPI(title="PageTrail")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Keep process startup independent from remote database availability."""
+    logger.info("PageTrail application starting")
+    yield
+    logger.info("PageTrail application stopping")
+
+
+app = FastAPI(title="PageTrail", lifespan=lifespan)
 
 app.include_router(auth_router)
 app.include_router(health_router)
@@ -64,13 +71,6 @@ async def sqlalchemy_error_handler(
             "detail": ("The database is temporarily unavailable. " "Please try again.")
         },
     )
-
-
-@app.on_event("startup")
-def startup() -> None:
-    # Create the RAG table before init_db enables RLS on it.
-    init_rag_db()
-    init_db()
 
 
 def _frontend_index() -> Path:
@@ -171,8 +171,9 @@ if FRONTEND_DIST.exists():
 
 if __name__ == "__main__":
     uvicorn.run(
-        "app.main:app",
+        app,
         host="0.0.0.0",
         port=int(os.getenv("PORT", "10000")),
-        reload=True,
+        reload=False,
+        log_level="info",
     )

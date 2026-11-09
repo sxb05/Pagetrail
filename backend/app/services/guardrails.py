@@ -2,11 +2,6 @@
 import os
 from functools import lru_cache
 import re
-from guardrails import Guard
-from guardrails_ai.detect_jailbreak import DetectJailbreak
-from guardrails_ai.detect_pii import DetectPII
-
-
 class InputBlockedError(ValueError):
     """Raised when an input fails a safety check."""
 
@@ -34,7 +29,12 @@ EXPLICIT_JAILBREAK_PATTERNS = [
 
 
 @lru_cache(maxsize=1)
-def _jailbreak_guard() -> Guard:
+def _jailbreak_guard():
+    # Import transformer-backed validators only when ML checks are enabled
+    # and a request actually needs them.
+    from guardrails import Guard
+    from guardrails_ai.detect_jailbreak import DetectJailbreak
+
     return Guard().use(
         DetectJailbreak(
             threshold=0.9,
@@ -44,8 +44,11 @@ def _jailbreak_guard() -> Guard:
 
 
 @lru_cache(maxsize=1)
-def _pii_guard() -> Guard:
-    """Build and cache the local PII detector."""
+def _pii_guard():
+    """Build and cache the local PII detector only when ML checks are enabled."""
+    from guardrails import Guard
+    from guardrails_ai.detect_pii import DetectPII
+
     return Guard().use(
         DetectPII(
             pii_entities=["EMAIL_ADDRESS", "PHONE_NUMBER"],
