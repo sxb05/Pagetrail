@@ -33,10 +33,13 @@ COPY backend/requirements.txt ./backend/requirements.txt
 
 RUN pip install --no-cache-dir -r backend/requirements.txt
 
-# Pre-download the jailbreak model weights during the image build so the
-# first request does not stall.  This step is a no-op when
-# PAGETRAIL_GUARDRAILS=false because the model is never called.
-RUN python -m guardrails_ai.detect_jailbreak.post_install
+# Download ML detector weights only when ML guardrails are explicitly enabled.
+# Keep the low-memory Render build free of unused model artifacts and setup work.
+RUN if [ "$PAGETRAIL_GUARDRAILS" = "true" ]; then \
+      python -m guardrails_ai.detect_jailbreak.post_install; \
+    else \
+      echo "Skipping Guardrails model download (PAGETRAIL_GUARDRAILS=false)"; \
+    fi
 
 COPY backend ./backend
 

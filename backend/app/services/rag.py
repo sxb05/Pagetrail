@@ -4,11 +4,6 @@ from pathlib import Path
 from typing import List
 from uuid import uuid4
 from functools import lru_cache
-import docx2txt
-from langchain_core.documents import Document
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pypdf import PdfReader
 from sqlalchemy import Column, MetaData, String, Table, Text, insert, select
 from pgvector.sqlalchemy import Vector
 # from app.core.paths import UPLOAD_DIR
@@ -18,10 +13,14 @@ from app.db.models import Conversation
 # UPLOAD_DIR.mkdir(exist_ok=True)
 
 @lru_cache(maxsize=1)
-def _get_embeddings() -> GoogleGenerativeAIEmbeddings:
-    return GoogleGenerativeAIEmbeddings(
-        model="gemini-embedding-001"
-    )
+def _get_embeddings():
+    # Import the Google integration only when ingestion or retrieval needs it.
+    from langchain_google_genai import GoogleGenerativeAIEmbeddings
+
+    if not __import__("os").getenv("GEMINI_API_KEY"):
+        raise RuntimeError("GEMINI_API_KEY is required for document embeddings.")
+
+    return GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
 
 EMBEDDING_DIM = 3072
 
@@ -51,12 +50,16 @@ def read_pdf(file_path: str) -> str:
     file_path = Path(file_path)
     suffix = file_path.suffix.lower()
     if suffix == ".pdf":
+        from pypdf import PdfReader
+
         pdf_reader = PdfReader(file_path)
         text = ""
         for page in pdf_reader.pages:
             text += (page.extract_text() or "") + "\n"
         return text
     if suffix == ".docx":
+        import docx2txt
+
         text = docx2txt.process(file_path)
         return text
     if suffix in [".txt", ".md"]:
@@ -71,6 +74,9 @@ def add_document_to_vector_store(
     """
     Read a document, split it into chunks, and add it to the vector store.
     """
+    from langchain_core.documents import Document
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+
     text = read_pdf(file_path)
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = text_splitter.split_text(text)
