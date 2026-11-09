@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from sqlalchemy import create_engine, inspect, text
@@ -16,40 +17,68 @@ def _looks_like_database_url(value: str) -> bool:
     return stripped.startswith(("postgresql://", "postgres://", "postgresql+psycopg://"))
 
 
-def _database_url() -> URL:
+logger = logging.getLogger(__name__)
+
+
+def _database_is_configured() -> bool:
     if settings.DATABASE_URL:
-        if not _looks_like_database_url(settings.DATABASE_URL):
-            raise ValueError(
-                "DATABASE_URL must be a PostgreSQL connection URL."
-            )
-        return make_url(settings.DATABASE_URL.strip()).set(
-            drivername="postgresql+psycopg"
+        return _looks_like_database_url(settings.DATABASE_URL)
+    return all(
+        (
+            settings.DATABASE_HOST,
+            settings.DATABASE_NAME,
+            settings.DATABASE_USERNAME,
+            settings.DATABASE_PASSWORD,
         )
-
-    # Build from discrete fields so special characters in the password are
-    # passed as a password value, not parsed as URL syntax.
-    required = {
-        "DATABASE_HOST": settings.DATABASE_HOST,
-        "DATABASE_NAME": settings.DATABASE_NAME,
-        "DATABASE_USERNAME": settings.DATABASE_USERNAME,
-        "DATABASE_PASSWORD": settings.DATABASE_PASSWORD,
-    }
-    missing = [name for name, value in required.items() if not value]
-    if missing:
-        raise ValueError(
-            "Database configuration is incomplete. Set DATABASE_URL or all "
-            "of these fields: " + ", ".join(missing)
-        )
-
-    return URL.create(
-        drivername="postgresql+psycopg",
-        username=settings.DATABASE_USERNAME,
-        password=settings.DATABASE_PASSWORD,
-        host=settings.DATABASE_HOST,
-        port=int(settings.DATABASE_PORT),
-        database=settings.DATABASE_NAME,
     )
 
+
+DATABASE_CONFIGURED = _database_is_configured()
+
+
+def _database_url() -> URL:
+    if settings.DATABASE_URL and _looks_like_database_url(settings.DATABASE_URL):
+        try:
+            return make_url(settings.DATABASE_URL.strip()).set(
+                drivername="postgresql+psycopg"
+            )
+        except Exception:
+            logger.exception("DATABASE_URL could not be parsed")
+    elif settings.DATABASE_URL:
+        logger.error("DATABASE_URL is not a valid PostgreSQL URL")
+
+    discrete_values = (
+        settings.DATABASE_HOST,
+        settings.DATABASE_NAME,
+        settings.DATABASE_USERNAME,
+        settings.DATABASE_PASSWORD,
+    )
+    if all(discrete_values):
+        try:
+            return URL.create(
+                drivername="postgresql+psycopg",
+                username=settings.DATABASE_USERNAME,
+                password=settings.DATABASE_PASSWORD,
+                host=settings.DATABASE_HOST,
+                port=int(settings.DATABASE_PORT),
+                database=settings.DATABASE_NAME,
+            )
+        except Exception:
+            logger.exception("Discrete PostgreSQL settings are invalid")
+
+    # Keep FastAPI import/liveness independent of DB configuration. Readiness
+    # explicitly returns 503 and application DB operations fail with a bounded
+    # local connection attempt rather than preventing the web listener binding.
+    logger.error(
+        "Database configuration is missing or invalid; "
+        "the application will start but database readiness will fail."
+    )
+    return URL.create(
+        drivername="postgresql+psycopg",
+        host="127.0.0.1",
+        port=5432,
+        database="pagetrail_unconfigured",
+    )
 
 
 database_url = _database_url()
@@ -57,17 +86,23 @@ database_url = _database_url()
 
 def _database_admin_url() -> URL:
     if not settings.DATABASE_ADMIN_URL:
-        # Temporary compatibility fallback. This does not separate roles
-        # until DATABASE_ADMIN_URL is configured.
+        # Compatibility fallback; set a distinct admin URL for schema changes
+        # when the runtime role is configured with least privilege.
         return database_url
 
     admin_value = settings.DATABASE_ADMIN_URL.strip()
     if not _looks_like_database_url(admin_value):
-        raise ValueError(
-            "DATABASE_ADMIN_URL must be a valid PostgreSQL URL."
+        logger.error(
+            "DATABASE_ADMIN_URL is invalid; falling back to DATABASE_URL. "
+            "Configure a valid admin URL before running schema initialization."
         )
+        return database_url
 
-    return make_url(admin_value).set(drivername="postgresql+psycopg")
+    try:
+        return make_url(admin_value).set(drivername="postgresql+psycopg")
+    except Exception:
+        logger.exception("DATABASE_ADMIN_URL could not be parsed")
+        return database_url
 
 
 def _connect_args_for(url: URL) -> dict:

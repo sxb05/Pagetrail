@@ -1,5 +1,6 @@
 import json
 import math
+import os
 from pathlib import Path
 from typing import List
 from uuid import uuid4
@@ -17,7 +18,7 @@ def _get_embeddings():
     # Import the Google integration only when ingestion or retrieval needs it.
     from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
-    if not __import__("os").getenv("GEMINI_API_KEY"):
+    if not os.getenv("GEMINI_API_KEY"):
         raise RuntimeError("GEMINI_API_KEY is required for document embeddings.")
 
     return GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
