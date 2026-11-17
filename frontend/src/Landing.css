@@ -291,11 +291,16 @@
 
 .landing-root .reveal-word {
   display: inline-block;
+  margin-inline-end: 0.28em;
   opacity: 0;
   transform: translateY(26px);
   transition:
     opacity 720ms cubic-bezier(0.2, 0, 0, 1),
     transform 720ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.landing-root .reveal-word:last-child {
+  margin-inline-end: 0;
 }
 
 .landing-root.is-ready .hero-title .reveal-word,

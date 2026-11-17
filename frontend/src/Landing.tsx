@@ -81,7 +81,7 @@ export default function Landing({ onEnterApp, onLogin, onSignup }: Props) {
                 aria-hidden="true"
                 style={{ transitionDelay: (480 + index * 85) + "ms" }}
               >
-                {word}{" "}
+                {word}
               </span>
             ))}
           </h1>
@@ -93,7 +93,7 @@ export default function Landing({ onEnterApp, onLogin, onSignup }: Props) {
                 key={index}
                 style={{ transitionDelay: (1150 + index * 22) + "ms" }}
               >
-                {word}{" "}
+                {word}
               </span>
             ))}
           </p>
