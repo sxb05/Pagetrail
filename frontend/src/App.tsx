@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { GoogleLogin } from "@react-oauth/google";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import brandLogoUrl from "./assets/pagetrail-icon.png";
 import Landing from "./Landing";
@@ -58,6 +59,9 @@ function publicErrorMessage(detail: unknown, fallback: string): string {
     : Array.isArray(detail) && detail[0] && typeof detail[0].msg === "string"
       ? detail[0].msg
       : fallback;
+  if (text.includes("String should match pattern")) {
+    return "Username can only contain letters, numbers, dots (.), underscores (_), and hyphens (-).";
+  }
   if (
     /postgresql:\/\/|postgres:\/\/|DATABASE_|password|sslmode|supabase\.com:\d+/i.test(text)
   ) {
@@ -202,9 +206,18 @@ type AuthPageProps = {
   isRegisterMode: boolean;
   onModeChange: (isRegisterMode: boolean) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onGoogleSuccess: (credential: string) => void;
+  onGoogleError: () => void;
 };
 
-function AuthPage({ error, isRegisterMode, onModeChange, onSubmit }: AuthPageProps) {
+function AuthPage({
+  error,
+  isRegisterMode,
+  onModeChange,
+  onSubmit,
+  onGoogleSuccess,
+  onGoogleError,
+}: AuthPageProps) {
   return (
     <main className="login-page">
       <AuthMotionBackground />
@@ -237,7 +250,7 @@ function AuthPage({ error, isRegisterMode, onModeChange, onSubmit }: AuthPagePro
           <label className="auth-field">
             <span>Username</span>
             <span className="auth-input-wrap">
-              <input type="text" name="username" autoComplete="username" required minLength={3} maxLength={255} pattern="[A-Za-z0-9_.-]+" placeholder="you@example" />
+              <input type="text" name="username" autoComplete="username" required minLength={3} maxLength={255} pattern="[A-Za-z0-9_.-]+" placeholder="alex.smith" title="Letters, numbers, dots, underscores, and hyphens only" />
             </span>
           </label>
           <label className="auth-field">
@@ -252,6 +265,20 @@ function AuthPage({ error, isRegisterMode, onModeChange, onSubmit }: AuthPagePro
             <ArrowUp size={17} />
           </button>
         </form>
+        <div className="google-login-divider"><span>or</span></div>
+        <div className="google-login">
+          <GoogleLogin
+            onSuccess={(response) => {
+              if (response.credential) {
+                onGoogleSuccess(response.credential);
+              } else {
+                onGoogleError();
+              }
+            }}
+            onError={onGoogleError}
+            useOneTap={false}
+          />
+        </div>
         <p className="auth-switch">
           {isRegisterMode ? "Already have an account?" : "New to Pagetrail?"}
           <button type="button" onClick={() => onModeChange(!isRegisterMode)}>
@@ -343,7 +370,7 @@ function App() {
     setError("");
 
     const target = e.currentTarget as HTMLFormElement;
-    const userVal = (target.elements.namedItem("username") as HTMLInputElement).value;
+    const userVal = (target.elements.namedItem("username") as HTMLInputElement).value.trim();
     const password = (target.elements.namedItem("password") as HTMLInputElement).value;
     const registering = route === "signup" || isRegisterMode;
 
@@ -367,7 +394,7 @@ function App() {
       }
 
       const formData = new URLSearchParams({ username: userVal, password });
-      const tokenResponse = await fetch("/api/auth/token", {
+      const tokenResponse = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: formData,
@@ -380,15 +407,49 @@ function App() {
         );
       }
 
-      const data = await tokenResponse.json();
-      localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem("username", userVal);
-      setUsername(userVal);
-      setIsLoggedIn(true);
-      setIsRegisterMode(false);
-      navigate(protectedRedirect());
+      await completeLogin(await tokenResponse.json(), userVal);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed.");
+    }
+  };
+
+  const completeLogin = (data: { access_token?: string }, signedInUsername: string) => {
+    if (!data.access_token) {
+      throw new Error("Authentication failed. Please try again.");
+    }
+    localStorage.setItem("access_token", data.access_token);
+    localStorage.setItem("username", signedInUsername);
+    setUsername(signedInUsername);
+    setIsLoggedIn(true);
+    setIsRegisterMode(false);
+    navigate(protectedRedirect());
+  };
+
+  const handleGoogleSuccess = async (credential: string) => {
+    setError("");
+    try {
+      const response = await fetch("/api/auth/google", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credential }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(publicErrorMessage(data.detail, "Google Sign-In failed."));
+      }
+      const profileResponse = await fetch("/api/auth/me", {
+        headers: { Authorization: `Bearer ${data.access_token}` },
+      });
+      if (!profileResponse.ok) {
+        const profileError = await profileResponse.json().catch(() => ({}));
+        throw new Error(
+          publicErrorMessage(profileError.detail, "Google Sign-In failed."),
+        );
+      }
+      const profile = await profileResponse.json();
+      await completeLogin(data, profile.username);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Google Sign-In failed.");
     }
   };
 
@@ -720,6 +781,8 @@ function App() {
           navigate(registerMode ? "/signup" : "/login");
         }}
         onSubmit={handleAuthSubmit}
+        onGoogleSuccess={handleGoogleSuccess}
+        onGoogleError={() => setError("Google Sign-In failed. Please try again.")}
       />
     );
   }

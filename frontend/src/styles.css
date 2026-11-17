@@ -37,8 +37,8 @@ button {
 
 .app-shell {
   display: flex;
-  height: 100vh;
-  max-height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
   width: 100%;
   overflow: hidden;
   position: relative;
@@ -48,8 +48,8 @@ button {
   flex: 0 0 270px;
   min-width: 0;
   width: 270px;
-  height: 100vh;
-  max-height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
   background: #050505;
   display: flex;
   flex-direction: column;
@@ -461,8 +461,8 @@ button {
 .main-panel {
   flex: 1;
   min-width: 0;
-  height: 100vh;
-  max-height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
   display: flex;
   flex-direction: column;
   background: #000;
@@ -1163,7 +1163,7 @@ button {
 .login-page {
   position: relative;
   isolation: isolate;
-  min-height: 100svh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -1475,6 +1475,31 @@ button {
   text-decoration: underline;
 }
 
+.google-login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0 14px;
+  color: #817887;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.google-login-divider::before,
+.google-login-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: #ffffff15;
+}
+
+.google-login {
+  display: flex;
+  justify-content: center;
+  min-height: 40px;
+}
+
 .login-note {
   margin: 17px 0 0;
   color: #817887;
@@ -1621,7 +1646,8 @@ button {
   }
 
   .topbar {
-    padding: 0 13px;
+    min-height: 57px;
+    padding: 0 max(13px, env(safe-area-inset-right)) 0 max(13px, env(safe-area-inset-left));
   }
 
   .chat-stage {
@@ -1667,7 +1693,14 @@ button {
 }
 
 @media (max-width: 480px) {
+  .login-page {
+    align-items: start;
+    overflow-y: auto;
+    padding: max(18px, env(safe-area-inset-top)) 12px max(18px, env(safe-area-inset-bottom));
+  }
+
   .login-card {
+    margin: auto 0;
     padding: 24px 20px;
     border-radius: 20px;
   }
@@ -1678,6 +1711,26 @@ button {
 
   .login-heading {
     padding-top: 37px;
+  }
+}
+
+@media (max-width: 720px) and (orientation: landscape) {
+  .login-page {
+    align-items: start;
+    overflow-y: auto;
+    padding-block: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-bottom));
+  }
+
+  .login-card {
+    margin: auto 0;
+  }
+
+  .login-heading {
+    padding-block: 25px 20px;
+  }
+
+  .login-orb {
+    display: none;
   }
 }
 

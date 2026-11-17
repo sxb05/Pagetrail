@@ -188,6 +188,33 @@ def init_db():
                         "INTEGER REFERENCES users(id)"
                     )
                 )
+        if connection.dialect.name == "postgresql":
+            connection.execute(
+                text("ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL")
+            )
+            existing_user_columns = {
+                column["name"] for column in inspector.get_columns("users")
+            }
+            if "email" not in existing_user_columns:
+                connection.execute(
+                    text("ALTER TABLE users ADD COLUMN email VARCHAR(255)")
+                )
+            if "google_sub" not in existing_user_columns:
+                connection.execute(
+                    text("ALTER TABLE users ADD COLUMN google_sub VARCHAR(255)")
+                )
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email_unique "
+                    "ON users (email)"
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_google_sub_unique "
+                    "ON users (google_sub)"
+                )
+            )
 
 
 def create_update_convo(

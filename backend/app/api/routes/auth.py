@@ -4,18 +4,21 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db.models import User
 from app.db.session import SessionLocal
-from app.schemas.auth import TokenResponse, UserCreate, UserResponse
+from app.schemas.auth import GoogleCredential, TokenResponse, UserCreate, UserResponse
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
@@ -121,7 +124,14 @@ def _decode_access_token(token: str) -> str:
 
 def _authenticate_user(db: Session, username: str, password: str) -> User | None:
     user = db.query(User).filter(User.username == username).first()
-    if user is None or not _verify_password(password, user.password_hash):
+    if user is None:
+        return None
+    if user.password_hash is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This account uses Google Sign-In. Please continue with Google.",
+        )
+    if not _verify_password(password, user.password_hash):
         return None
     return user
 
@@ -151,6 +161,7 @@ def register(user_data: UserCreate, db: Annotated[Session, Depends(get_db)]) -> 
 
 
 @router.post("/token", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse, include_in_schema=False)
 def login(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     db: Annotated[Session, Depends(get_db)],
@@ -163,6 +174,90 @@ def login(
             detail="Incorrect username or password.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    return TokenResponse(
+        access_token=_create_access_token(user.username),
+        token_type="bearer",
+    )
+
+
+def _google_username(db: Session, email: str) -> str:
+    prefix = email.split("@", 1)[0]
+    base = re.sub(r"[^A-Za-z0-9_.-]", "-", prefix).strip("-.")
+    if len(base) < 3:
+        base = f"google-{base}" if base else "google-user"
+    base = base[:255]
+
+    username = base
+    suffix = 2
+    while db.query(User.id).filter(User.username == username).first() is not None:
+        suffix_text = f"-{suffix}"
+        username = f"{base[:255 - len(suffix_text)]}{suffix_text}"
+        suffix += 1
+    return username
+
+
+@router.post("/google", response_model=TokenResponse)
+def google_login(
+    credential_data: GoogleCredential,
+    db: Annotated[Session, Depends(get_db)],
+) -> TokenResponse:
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    if not client_id:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Google Sign-In is not configured.",
+        )
+
+    try:
+        claims = id_token.verify_oauth2_token(
+            credential_data.credential,
+            google_requests.Request(),
+            client_id,
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Google Sign-In credential.",
+        ) from None
+
+    email = claims.get("email")
+    google_sub = claims.get("sub")
+    if (
+        not isinstance(email, str)
+        or not email
+        or not isinstance(google_sub, str)
+        or not google_sub
+        or claims.get("email_verified") is not True
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Google Sign-In requires a verified email address.",
+        )
+
+    normalized_email = email.lower()
+    user = db.query(User).filter(User.google_sub == google_sub).first()
+    if user is None:
+        user = db.query(User).filter(User.email == normalized_email).first()
+        if user is not None:
+            user.google_sub = google_sub
+    if user is None:
+        user = User(
+            username=_google_username(db, normalized_email),
+            email=normalized_email,
+            google_sub=google_sub,
+            password_hash=None,
+        )
+        db.add(user)
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This Google account could not be linked. Please try again.",
+        ) from None
+
     return TokenResponse(
         access_token=_create_access_token(user.username),
         token_type="bearer",

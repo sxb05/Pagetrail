@@ -16,3 +16,7 @@ class UserResponse(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str
+
+
+class GoogleCredential(BaseModel):
+    credential: str = Field(min_length=1)

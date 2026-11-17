@@ -10,6 +10,7 @@ langsmith==0.12.2
 
 # LLM Providers & Search Tools
 google-genai==2.22.0
+google-auth
 langchain-google-genai==4.4.0
 groq==0.37.1
 langchain-groq==1.1.3

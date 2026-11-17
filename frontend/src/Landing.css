@@ -122,12 +122,12 @@
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   color: var(--on-media);
   text-decoration: none;
   font-size: 19px;
   font-weight: 500;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.04em;
 }
 
 .landing-root .brand-mark {
@@ -135,12 +135,16 @@
   width: 27px;
   height: 27px;
   place-items: center;
+  overflow: hidden;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #211b29, #812f00);
 }
 
-.landing-root .brand-mark svg {
+.landing-root .brand-mark img {
   display: block;
   width: 100%;
   height: 100%;
+  object-fit: cover;
 }
 
 .landing-root .nav-links {

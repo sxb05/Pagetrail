@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import "./Landing.css";
 import { fluidSimulation } from "./fluidSimulation";
+import brandLogoUrl from "./assets/pagetrail-icon.png";
 
 interface Props {
   onEnterApp: () => void;
@@ -11,26 +12,6 @@ interface Props {
 const headingWords = ["Your", "documents,", "understood."];
 const descriptionWords =
   "Ask questions across your PDFs and files, trace answers to relevant content, and search the web when you need more.".split(" ");
-
-function FlowMark() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M2.5 9c2.5 0 2.5 4.2 5 4.2S10 9 12 9s2.5 4.2 5 4.2S19.5 9 21.5 9"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-      <path
-        d="M2.5 15c2.5 0 2.5 4.2 5 4.2S10 15 12 15s2.5 4.2 5 4.2S19.5 15 21.5 15"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        opacity="0.5"
-      />
-    </svg>
-  );
-}
 
 function ArrowUpRight() {
   return (
@@ -68,7 +49,7 @@ export default function Landing({ onEnterApp, onLogin, onSignup }: Props) {
 
         <header className="nav">
           <a href="#top" className="brand" aria-label="Pagetrail home">
-            <span className="brand-mark"><FlowMark /></span>
+            <span className="brand-mark"><img src={brandLogoUrl} alt="" aria-hidden="true" /></span>
             <span>Pagetrail</span>
           </a>
 
