@@ -48,8 +48,9 @@ jobs:
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
         run: |
           npm ci --prefix frontend
-          npx --prefix frontend tsc --noEmit
+          npx --prefix frontend tsc --project frontend/tsconfig.json --noEmit
           npm run build --prefix frontend
+
 
       - name: Build Docker image
         run: |
