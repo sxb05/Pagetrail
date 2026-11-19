@@ -647,10 +647,58 @@ The initializer:
 2. Verifies the PostgreSQL vector extension.
 3. Creates the document retrieval table.
 4. Creates application tables.
-5. Applies the existing additive setup.
-6. Exits non-zero when initialization fails.
+5. Creates the project, project membership, and task tables with their
+   constraints and indexes.
+6. Applies the existing additive setup.
+7. Exits non-zero when initialization fails.
 
 Run it before deploying releases that depend on schema changes. Do not execute schema DDL inside Uvicorn startup or FastAPI lifespan.
+The project schema is additive and repeatable through this command; it does not
+drop tables or delete existing data. The initializer uses the configured admin
+database URL when available, so review the target connection before running it
+against Supabase.
+
+### Project Operations Database Foundation
+
+The SQLAlchemy metadata now contains the existing `users`, `conversations`,
+`chat_messages`, `long_term_memory`, and RAG `rag_documents` tables plus:
+`organizations`, `organization_members`, `projects`, `project_members`,
+`tasks`, `milestones`, `task_dependencies`, `project_documents`,
+`meeting_notes`, `agent_runs`, `agent_approvals`, `agent_events`,
+`agent_artifacts`, `agent_schedules`, `integration_connections`, and
+`audit_logs`.
+
+```mermaid
+erDiagram
+    USERS ||--o{ ORGANIZATIONS : creates
+    USERS ||--o{ ORGANIZATION_MEMBERS : joins
+    ORGANIZATIONS ||--o{ ORGANIZATION_MEMBERS : has
+    ORGANIZATIONS ||--o{ PROJECTS : contains
+    PROJECTS ||--o{ PROJECT_MEMBERS : has
+    PROJECTS ||--o{ TASKS : contains
+    PROJECTS ||--o{ MILESTONES : has
+    TASKS ||--o{ TASK_DEPENDENCIES : depends_on
+    PROJECTS ||--o{ PROJECT_DOCUMENTS : stores
+    PROJECTS ||--o{ MEETING_NOTES : records
+    ORGANIZATIONS ||--o{ AGENT_RUNS : owns
+    AGENT_RUNS ||--o{ AGENT_EVENTS : emits
+    AGENT_RUNS ||--o{ AGENT_APPROVALS : requests
+    AGENT_RUNS ||--o{ AGENT_ARTIFACTS : produces
+    ORGANIZATIONS ||--o{ INTEGRATION_CONNECTIONS : authorizes
+    ORGANIZATIONS ||--o{ AUDIT_LOGS : records
+```
+
+Project assignees are constrained by a project-membership foreign key.
+Dependency self-links and duplicates are database-constrained; same-project
+links are constrained by composite foreign keys. Dependency cycle detection
+belongs in the future task service because it requires graph traversal.
+
+RLS is not enabled for these new tables by the initializer yet. Existing
+runtime roles and incomplete policies must be reviewed before activation;
+application-level organization membership and project membership checks remain
+required. `credential_reference` stores only a reference to a future encrypted
+secret, not OAuth tokens. Token encryption and a secret-manager integration are
+required before integrations are enabled.
 
 ### Health Endpoints
 

@@ -7,7 +7,15 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
 from app.db.base import Base
-from app.db.models import ChatMessage, Conversation, LongTermMemory
+from app.db.models import (
+    ChatMessage,
+    Conversation,
+    LongTermMemory,
+    Project,
+    ProjectMember,
+    Task,
+    User,
+)
 
 
 def _looks_like_database_url(value: str) -> bool:
@@ -161,6 +169,9 @@ def init_db():
         "chat_messages",
         "long_term_memory",
         "rag_documents",
+        "projects",
+        "project_members",
+        "tasks",
     )
     migrations = {
         "conversations": "user_id",
