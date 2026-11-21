@@ -169,26 +169,6 @@ def retrieve_documents(
     with engine.connect() as connection:
         ranked_rows = connection.execute(statement).mappings().all()
 
-    # TEMPORARY DEBUG LOGGING: use locally for retrieval evaluation.
-    print("\n" + "=" * 70)
-    print(f"[RAG DEBUG] Query: {query!r}")
-    print(f"[RAG DEBUG] Retrieved {len(ranked_rows)} chunks")
-
-    for rank, row in enumerate(ranked_rows, start=1):
-        content = row["content"] or ""
-        distance_value = float(row["distance"])
-
-        print(f"\n--- Rank #{rank} ---")
-        print(f"Chunk ID: {row['id']}")
-        print(f"Source: {row['source']}")
-        print(
-            f"Cosine distance: {distance_value:.6f} "
-            "(lower is better)"
-        )
-        print(f"Chunk preview: {content[:400]}")
-
-    print("=" * 70)
-
     if not ranked_rows:
         return "No relevant documents found."
 

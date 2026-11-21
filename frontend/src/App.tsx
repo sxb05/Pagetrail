@@ -348,6 +348,7 @@ function App() {
   const navigate = (path: string) => {
     window.history.pushState(null, "", path);
     setRoute(routeForPath(path));
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   };
 
   const enterApp = () => {
@@ -466,11 +467,21 @@ function App() {
 
   useEffect(() => {
     const handlePopState = () => {
-      setRoute(routeForPath(window.location.pathname));
+      const nextRoute = routeForPath(window.location.pathname);
+      setRoute(nextRoute);
+      window.requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      });
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
+
+  useEffect(() => {
+    const isPublicRoute = route === "landing" || route === "login" || route === "signup" || route === "not-found";
+    document.documentElement.classList.toggle("public-route", isPublicRoute);
+    document.body.classList.toggle("public-route", isPublicRoute);
+  }, [route]);
 
   useEffect(() => {
     if (!isLoggedIn) return;

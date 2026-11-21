@@ -36,6 +36,14 @@ body {
   background: #000000;
 }
 
+html.public-route,
+body.public-route {
+  height: auto;
+  min-height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
 body {
   min-width: 320px;
 }

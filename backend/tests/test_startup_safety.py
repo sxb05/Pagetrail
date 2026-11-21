@@ -8,6 +8,7 @@ def test_guardrails_module_does_not_import_ml_detectors_when_disabled():
     env = os.environ.copy()
     env["PAGETRAIL_GUARDRAILS"] = "false"
     env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1])
+    env["JWT_SECRET_KEY"] = "test-only-jwt-secret-key-at-least-32-characters"
 
     code = (
         "import sys; "

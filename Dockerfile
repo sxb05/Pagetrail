@@ -3,6 +3,9 @@ FROM node:20-alpine AS frontend-build
 
 WORKDIR /frontend
 
+ARG VITE_GOOGLE_CLIENT_ID
+ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
+
 COPY frontend/package*.json ./
 RUN npm ci
 

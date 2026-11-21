@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     ALEMBIC_DATABASE_URL: str | None = None
 
     SECRET_KEY: str | None = None
+    JWT_SECRET_KEY: str | None = None
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 

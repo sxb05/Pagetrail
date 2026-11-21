@@ -19,15 +19,24 @@ from sqlalchemy.orm import Session
 from app.db.models import User
 from app.db.session import SessionLocal
 from app.schemas.auth import GoogleCredential, TokenResponse, UserCreate, UserResponse
+from app.core.config import settings
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
-TOKEN_EXPIRE_MINUTES = 30
-JWT_SECRET_KEY = os.getenv(
-    "JWT_SECRET_KEY",
-    "development-only-change-this-secret-before-deployment",
-)
-JWT_ALGORITHM = "HS256"
+TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+
+
+def get_jwt_secret() -> str:
+    secret = settings.JWT_SECRET_KEY or settings.SECRET_KEY
+    if not secret or len(secret) < 32:
+        raise RuntimeError(
+            "JWT_SECRET_KEY must be set to a secret of at least 32 characters "
+            "before the application starts"
+        )
+    return secret
+
+
+JWT_ALGORITHM = settings.ALGORITHM
 
 
 def get_db():
@@ -71,6 +80,7 @@ def _verify_password(password: str, encoded_hash: str) -> bool:
 
 
 def _create_access_token(username: str) -> str:
+    jwt_secret = get_jwt_secret()
     header = {"alg": JWT_ALGORITHM, "typ": "JWT"}
     payload = {
         "sub": username,
@@ -82,17 +92,18 @@ def _create_access_token(username: str) -> str:
     payload_segment = _encode_segment(json.dumps(payload, separators=(",", ":")).encode())
     signing_input = f"{header_segment}.{payload_segment}".encode("ascii")
     signature = hmac.new(
-        JWT_SECRET_KEY.encode("utf-8"), signing_input, hashlib.sha256
+        jwt_secret.encode("utf-8"), signing_input, hashlib.sha256
     ).digest()
     return f"{header_segment}.{payload_segment}.{_encode_segment(signature)}"
 
 
 def _decode_access_token(token: str) -> str:
+    jwt_secret = get_jwt_secret()
     try:
         header_segment, payload_segment, signature_segment = token.split(".")
         signing_input = f"{header_segment}.{payload_segment}".encode("ascii")
         expected_signature = hmac.new(
-            JWT_SECRET_KEY.encode("utf-8"), signing_input, hashlib.sha256
+            jwt_secret.encode("utf-8"), signing_input, hashlib.sha256
         ).digest()
         if not hmac.compare_digest(
             expected_signature, _decode_segment(signature_segment)
@@ -201,7 +212,7 @@ def google_login(
     credential_data: GoogleCredential,
     db: Annotated[Session, Depends(get_db)],
 ) -> TokenResponse:
-    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    client_id = os.getenv("GOOGLE_CLIENT_ID") or os.getenv("VITE_GOOGLE_CLIENT_ID")
     if not client_id:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

@@ -15,7 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(PROJECT_ROOT / ".env")
 
-from app.api.routes.auth import router as auth_router  # noqa: E402
+from app.api.routes.auth import get_jwt_secret, router as auth_router  # noqa: E402
 from app.api.routes.chat import router as chat_router  # noqa: E402
 from app.api.routes.health import router as health_router  # noqa: E402
 from app.api.routes.projects import router as projects_router  # noqa: E402
@@ -41,6 +41,7 @@ cors_origins = [
 async def lifespan(_app: FastAPI):
     """Keep process startup independent from remote database availability."""
     logger.info("PageTrail application starting")
+    get_jwt_secret()
     yield
     logger.info("PageTrail application stopping")
 
