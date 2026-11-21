@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     DATABASE_NAME: str | None = None
     DATABASE_USERNAME: str | None = None
     DATABASE_PASSWORD: str | None = None
+    ALEMBIC_DATABASE_URL: str | None = None
 
     SECRET_KEY: str | None = None
     ALGORITHM: str = "HS256"

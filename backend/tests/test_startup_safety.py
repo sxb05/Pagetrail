@@ -41,6 +41,7 @@ def test_liveness_and_readiness_are_separate_without_database_config():
         "DATABASE_PASSWORD",
     ):
         env.pop(name, None)
+        env[name] = ""
 
     code = (
         "from fastapi.testclient import TestClient; "

@@ -3,11 +3,13 @@ import { GoogleLogin } from "@react-oauth/google";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import brandLogoUrl from "./assets/pagetrail-icon.png";
 import Landing from "./Landing";
+import Projects from "./Projects";
 import {
   ArrowUp,
   ChevronDown,
   Copy,
   FileText,
+  FolderKanban,
   LogOut,
   MessageSquare,
   MoreHorizontal,
@@ -29,19 +31,20 @@ type UploadedDoc = {
   size?: number;
 };
 
-type AppRoute = "landing" | "login" | "signup" | "app" | "not-found";
+type AppRoute = "landing" | "login" | "signup" | "app" | "projects" | "not-found";
 
 function routeForPath(pathname: string): AppRoute {
   if (pathname === "/") return "landing";
   if (pathname === "/login") return "login";
   if (pathname === "/signup") return "signup";
   if (pathname === "/app" || pathname.startsWith("/chat/")) return "app";
+  if (pathname === "/projects" || pathname.startsWith("/projects/")) return "projects";
   return "not-found";
 }
 
 function protectedRedirect(): string {
   const redirect = new URLSearchParams(window.location.search).get("redirect");
-  return redirect && (redirect === "/app" || redirect.startsWith("/chat/"))
+  return redirect && (redirect === "/app" || redirect.startsWith("/chat/") || redirect === "/projects" || redirect.startsWith("/projects/"))
     ? redirect
     : "/app";
 }
@@ -791,6 +794,20 @@ function App() {
     return <main aria-busy="true">Checking authentication…</main>;
   }
 
+  if (route === "projects") {
+    if (!isLoggedIn) {
+      navigate(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+      return <main aria-busy="true">Checking authentication…</main>;
+    }
+    return (
+      <Projects
+        authenticatedFetch={authenticatedFetch}
+        navigate={navigate}
+        username={username}
+      />
+    );
+  }
+
   if (route === "not-found") {
     return (
       <main className="login-page">
@@ -833,6 +850,9 @@ function App() {
           </div>
           <button className="new-chat" onClick={newChat}>
             <Plus size={17} /> New chat <span className="shortcut">Ctrl K</span>
+          </button>
+          <button className="new-chat projects-nav" onClick={() => navigate("/projects")}>
+            <FolderKanban size={17} /> Projects
           </button>
           <div className="sidebar-search">
             <Search size={16} />

@@ -161,7 +161,6 @@ def get_db():
     finally:
         db.close()
 
-
 def init_db():
     rls_tables = (
         "users",
@@ -170,7 +169,7 @@ def init_db():
         "long_term_memory",
         "rag_documents",
         "projects",
-        "project_members",
+        "project_members"
         "tasks",
     )
     migrations = {

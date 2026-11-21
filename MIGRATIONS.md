@@ -1,0 +1,141 @@
+# Pagetrail database migrations
+
+## Safety boundaries
+
+- Migrations are version-controlled Alembic operations.
+- FastAPI startup does not execute migrations or call schema mutation helpers.
+- Legacy `init_db()` and `init_rag_db()` remain callable for backward
+  compatibility. They still perform schema operations; do not run the legacy
+  initializer against production during migration rollout.
+- Do not stamp or upgrade production until a read-only schema comparison is
+  complete and the baseline matches.
+- Never commit database URLs or credentials.
+- The migration role must be separate from the runtime role where possible.
+
+## Legacy initialization behavior
+
+`app.db.session.init_db()` uses `Base.metadata.create_all()`, then enables RLS
+for a hard-coded table list and conditionally adds legacy columns/indexes.
+`app.services.rag.init_rag_db()` uses `rag.metadata.create_all()` to create or
+add the RAG table. `app.scripts.init_database.main()` checks pgvector, calls
+`init_rag_db()`, calls `init_db()`, and logs success.
+
+These functions are preserved unchanged for backward compatibility in this
+initial implementation. FastAPI lifespan does not call them. Their behavior
+remains supported for older deployment scripts, but it competes with Alembic
+and must not be used for the validated migration rollout. Refactoring these
+helpers into read-only validation utilities is deferred until migration
+autogeneration and application regression tests are proven.
+
+## Initial revisions
+
+- `001_existing_production` describes the read-only-inspected production-era
+  schema: users, conversations, chat messages, long-term memory, RAG documents,
+  LangGraph checkpoint tables, keep-alive logs, pgvector, and the RLS state on
+  existing application tables.
+- `002_project_operations_models` creates only the newly introduced project,
+  organization, agent, integration, and audit tables.
+
+The baseline has not been stamped against production. The production schema
+was read-only inspected and contains no project operations tables. It also
+contains no RLS policies, while RLS is enabled on several existing tables.
+The migration account observed was PostgreSQL with `BYPASSRLS=true`; this does
+not prove RLS protection for the application role.
+
+RLS for the new tables is intentionally not enabled by 002 until ownership
+relationships and backend roles/policies are explicitly designed and reviewed.
+Application membership checks remain required. Do not assume RLS is secure
+without policy inspection.
+
+## Read-only database comparison
+
+| Database object | Production currently | Expected after migrations | Action |
+|---|---|---|---|
+| `users`, `conversations`, `chat_messages`, `long_term_memory` | Present with baseline columns and indexes | Same | Document in 001; no destructive changes |
+| `rag_documents` (`vector(3072)`) | Present; pgvector 0.8.2 | Same | Document in 001; verify existing dimension |
+| LangGraph `checkpoints`, `checkpoint_blobs`, `checkpoint_writes`, `checkpoint_migrations` | Present | Same | Document baseline; library owns future checkpoint migrations |
+| `keep_alive_logs` | Present | Same | Document in 001 |
+| `projects`, `project_members`, `tasks`, `milestones`, `task_dependencies`, `project_documents`, `meeting_notes` | Missing | Created by 002 | Create only missing tables |
+| `organizations`, `organization_members` | Missing | Created by 002 | Create before projects |
+| `agent_runs`, `agent_approvals`, `agent_events`, `agent_artifacts`, `agent_schedules` | Missing | Created by 002 | Create with relationships |
+| `integration_connections`, `audit_logs` | Missing | Created by 002 | Create with indexes and constraints |
+| Existing RLS enabled tables | RLS enabled; no policies found | Preserve existing state | Do not invent policies |
+| New-table RLS | N/A | Still no policy migration | Gap remains; application authorization required |
+| Current role | `postgres`, `BYPASSRLS=true` | Migration role TBD | RLS protection of backend role is unverified |
+
+## Development setup
+
+Set only the migration target:
+
+```powershell
+$env:PYTHONPATH="backend"
+$env:ALEMBIC_DATABASE_URL="postgresql+psycopg://<development-user>:<password>@<development-host>:5432/postgres"
+```
+
+The URL must use SSL. The Alembic environment refuses to run without
+`ALEMBIC_DATABASE_URL`; it does not fall back to runtime database settings.
+
+Install and inspect:
+
+```powershell
+python -m pip install -r backend/requirements.txt
+python -m alembic -c backend/alembic.ini current
+python -m alembic -c backend/alembic.ini heads
+python -m alembic -c backend/alembic.ini history
+```
+
+Review SQL before applying:
+
+```powershell
+python -m alembic -c backend/alembic.ini upgrade head --sql
+python -m alembic -c backend/alembic.ini upgrade head --sql > migration.sql
+```
+
+Apply to development only:
+
+```powershell
+python -m alembic -c backend/alembic.ini upgrade head
+python -m pytest backend/tests -v
+```
+
+After the development migration succeeds, inspect the target:
+
+```powershell
+python -m alembic -c backend/alembic.ini current
+python -m alembic -c backend/alembic.ini check
+```
+
+## Production procedure
+
+1. Export a verified backup or Supabase point-in-time backup.
+2. Run the read-only catalog comparison documented in the database report.
+3. Confirm every baseline table, column, constraint, and index matches before
+   stamping `001_existing_production`.
+4. Set `ALEMBIC_DATABASE_URL` to the reviewed production migration URL.
+5. Confirm the printed host and database on a terminal session before the next
+   command.
+6. Stamp only after verification:
+
+```powershell
+python -m alembic -c backend/alembic.ini stamp 001_existing_production
+```
+
+This command is intentionally never run automatically. Then review and apply
+the reviewed 002 migration manually during a maintenance window:
+
+```powershell
+python -m alembic -c backend/alembic.ini upgrade 002_project_operations
+python -m alembic -c backend/alembic.ini current
+python -m alembic -c backend/alembic.ini check
+```
+
+Do not run `upgrade head` until an authorized operator has reviewed the exact
+head and target. 002 deliberately has no destructive downgrade.
+
+## Failed migration
+
+Alembic records a revision only after the transaction completes. Before
+retrying, inspect `alembic_version` and application logs, restore only under
+the organization's incident procedure if rollback is required, and resolve the
+failed SQL manually. Do not reset or drop tables. Do not edit an already
+applied migration; add a new forward-only repair revision.

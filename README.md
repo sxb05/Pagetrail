@@ -618,9 +618,10 @@ The application is available at `http://localhost:8000`.
 
 ## 13. Database Initialization
 
-Pagetrail deliberately keeps schema initialization outside the FastAPI startup lifecycle. This prevents database initialization from blocking the application from binding to its hosting port.
-
-Run the initializer for a fresh database or when a release requires schema changes.
+Pagetrail keeps schema mutations outside the FastAPI startup lifecycle. Legacy
+initialization helpers remain available during the migration transition. See
+`MIGRATIONS.md` for the baseline, development, production procedure, and
+backward-compatible behavior of `init_db()` and `init_rag_db()`.
 
 **Windows PowerShell:**
 
@@ -641,22 +642,17 @@ PYTHONPATH=backend python -m app.scripts.init_database
 python -m app.scripts.init_database
 ```
 
-The initializer:
+The legacy initializer still:
 
 1. Uses `DATABASE_ADMIN_URL` when configured, otherwise `DATABASE_URL`.
 2. Verifies the PostgreSQL vector extension.
 3. Creates the document retrieval table.
 4. Creates application tables.
-5. Creates the project, project membership, and task tables with their
-   constraints and indexes.
-6. Applies the existing additive setup.
-7. Exits non-zero when initialization fails.
+5. Applies additive RLS/column/index setup.
 
-Run it before deploying releases that depend on schema changes. Do not execute schema DDL inside Uvicorn startup or FastAPI lifespan.
-The project schema is additive and repeatable through this command; it does not
-drop tables or delete existing data. The initializer uses the configured admin
-database URL when available, so review the target connection before running it
-against Supabase.
+It has been preserved for backward compatibility and is not invoked by FastAPI
+startup. Do not run it or Alembic against production until the baseline is
+verified and stamped only through the manual procedure in `MIGRATIONS.md`.
 
 ### Project Operations Database Foundation
 
