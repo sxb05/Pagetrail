@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { GoogleLogin } from "@react-oauth/google";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import brandLogoUrl from "./assets/pagetrail-icon.png";
+import Aurora from "./Aurora";
 import Landing from "./Landing";
 import Projects from "./Projects";
+import Overview from "./Overview";
 import {
   ArrowUp,
   ChevronDown,
@@ -11,6 +13,7 @@ import {
   FileText,
   FolderKanban,
   LogOut,
+  LayoutDashboard,
   MessageSquare,
   MoreHorizontal,
   PanelLeftClose,
@@ -31,12 +34,13 @@ type UploadedDoc = {
   size?: number;
 };
 
-type AppRoute = "landing" | "login" | "signup" | "app" | "projects" | "not-found";
+type AppRoute = "landing" | "login" | "signup" | "app" | "overview" | "projects" | "not-found";
 
 function routeForPath(pathname: string): AppRoute {
   if (pathname === "/") return "landing";
   if (pathname === "/login") return "login";
   if (pathname === "/signup") return "signup";
+  if (pathname === "/overview") return "overview";
   if (pathname === "/app" || pathname.startsWith("/chat/")) return "app";
   if (pathname === "/projects" || pathname.startsWith("/projects/")) return "projects";
   return "not-found";
@@ -44,7 +48,7 @@ function routeForPath(pathname: string): AppRoute {
 
 function protectedRedirect(): string {
   const redirect = new URLSearchParams(window.location.search).get("redirect");
-  return redirect && (redirect === "/app" || redirect.startsWith("/chat/") || redirect === "/projects" || redirect.startsWith("/projects/"))
+  return redirect && (redirect === "/app" || redirect.startsWith("/chat/") || redirect === "/overview" || redirect === "/projects" || redirect.startsWith("/projects/"))
     ? redirect
     : "/app";
 }
@@ -175,37 +179,9 @@ function AssistantText({ content }: { content: string }) {
   return <div className="message-text message-text--rich">{elements}</div>;
 }
 
-const backgroundOrbs = [
-  { className: "auth-orb auth-orb--amber", initial: { x: -80, y: 30 }, animate: { x: 80, y: -45 } },
-  { className: "auth-orb auth-orb--violet", initial: { x: 70, y: -35 }, animate: { x: -55, y: 55 } },
-  { className: "auth-orb auth-orb--rose", initial: { x: 0, y: 65 }, animate: { x: -45, y: -35 } },
-];
-
-function AuthMotionBackground() {
-  const prefersReducedMotion = useReducedMotion();
-
-  return (
-    <div className="auth-motion-background" aria-hidden="true">
-      <motion.div
-        className="auth-mesh"
-        animate={prefersReducedMotion ? undefined : { rotate: 360, scale: [1, 1.03, 1] }}
-        transition={prefersReducedMotion ? undefined : { rotate: { duration: 96, repeat: Infinity, ease: "linear" }, scale: { duration: 24, repeat: Infinity, ease: "easeInOut" } }}
-      />
-      {backgroundOrbs.map((orb, index) => (
-        <motion.div
-          className={orb.className}
-          key={orb.className}
-          initial={orb.initial}
-          animate={prefersReducedMotion ? orb.initial : orb.animate}
-          transition={prefersReducedMotion ? undefined : { duration: 18 + index * 5, repeat: Infinity, repeatType: "mirror", ease: "easeInOut", delay: index * -2 }}
-        />
-      ))}
-    </div>
-  );
-}
-
 type AuthPageProps = {
   error: string;
+  isSubmitting: boolean;
   isRegisterMode: boolean;
   onModeChange: (isRegisterMode: boolean) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -215,24 +191,36 @@ type AuthPageProps = {
 
 function AuthPage({
   error,
+  isSubmitting,
   isRegisterMode,
   onModeChange,
   onSubmit,
   onGoogleSuccess,
   onGoogleError,
 }: AuthPageProps) {
+  const [showPassword, setShowPassword] = useState(false);
   return (
     <main className="login-page">
-      <AuthMotionBackground />
-      <div className="login-noise" aria-hidden="true" />
-      <section className="login-card" aria-labelledby="login-title">
-        <div className="login-brand">
-          <span className="brand-mark"><BrandLogo size={18} /></span>
-          <span>Pagetrail</span>
-          <span className="login-live"><span /> Secure workspace</span>
-        </div>
-        <div className="login-heading">
-          <div className="login-orb" aria-hidden="true"><BrandLogo size={30} /></div>
+      <Aurora className="auth-aurora" />
+      <section className="auth-shell" aria-labelledby="login-title">
+        <aside className="auth-story">
+          <a className="auth-brand" href="/" aria-label="Pagetrail home">
+            <span className="brand-mark"><BrandLogo size={18} /></span>
+            <span>Pagetrail</span>
+          </a>
+          <div className="auth-story-copy">
+            <p>AI project operations</p>
+            <h1>Knowledge becomes action.</h1>
+            <span>Projects, documents and team context in one clear workspace.</span>
+          </div>
+          <div className="auth-network" aria-hidden="true">
+            <span className="auth-node auth-node-a">Brief</span>
+            <span className="auth-node auth-node-b">Tasks</span>
+            <span className="auth-node auth-node-c">Notes</span>
+          </div>
+        </aside>
+        <div className="login-card">
+          <div className="login-heading">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={isRegisterMode ? "register" : "login"}
@@ -242,13 +230,13 @@ function AuthPage({
               transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
             >
               <p className="login-eyebrow">{isRegisterMode ? "Start creating" : "Welcome back"}</p>
-              <h1 id="login-title">{isRegisterMode ? "Create your account" : "Your ideas, in one place."}</h1>
+              <h1 id="login-title">{isRegisterMode ? "Create your workspace" : "Continue to Pagetrail"}</h1>
               <p>{isRegisterMode
-                ? "Set up your private AI workspace in a few seconds."
-                : "Sign in to continue your conversations, ideas, and work."}</p>
+                ? "Create an account to start organising projects."
+                : "Sign in to continue your projects and conversations."}</p>
             </motion.div>
           </AnimatePresence>
-        </div>
+          </div>
         <form className="auth-form" onSubmit={onSubmit}>
           <label className="auth-field">
             <span>Username</span>
@@ -259,12 +247,15 @@ function AuthPage({
           <label className="auth-field">
             <span>Password</span>
             <span className="auth-input-wrap">
-              <input type="password" name="password" autoComplete={isRegisterMode ? "new-password" : "current-password"} required minLength={8} maxLength={128} placeholder="At least 8 characters" />
+              <input type={showPassword ? "text" : "password"} name="password" autoComplete={isRegisterMode ? "new-password" : "current-password"} required minLength={8} maxLength={128} placeholder="At least 8 characters" />
+              <button type="button" className="password-toggle" onClick={() => setShowPassword((current) => !current)} aria-label={showPassword ? "Hide password" : "Show password"}>
+                {showPassword ? "Hide" : "Show"}
+              </button>
             </span>
           </label>
           {error && <p className="auth-error" role="alert">{error}</p>}
-          <button className="login-button" type="submit">
-            <span>{isRegisterMode ? "Create account" : "Continue to Pagetrail"}</span>
+          <button className="login-button" type="submit" disabled={isSubmitting}>
+            <span>{isSubmitting ? "Please wait…" : isRegisterMode ? "Create account" : "Continue to Pagetrail"}</span>
             <ArrowUp size={17} />
           </button>
         </form>
@@ -289,6 +280,7 @@ function AuthPage({
           </button>
         </p>
         <p className="login-note">Private by design. Your conversations and documents belong to you.</p>
+        </div>
       </section>
     </main>
   );
@@ -328,6 +320,7 @@ function App() {
 
   const [model, setModel] = useState("gemini-3.1-flash-lite");
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRegisterMode, setIsRegisterMode] = useState(false);
 
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
@@ -371,6 +364,7 @@ function App() {
   const handleAuthSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
+    setIsSubmitting(true);
 
     const target = e.currentTarget as HTMLFormElement;
     const userVal = (target.elements.namedItem("username") as HTMLInputElement).value.trim();
@@ -413,6 +407,8 @@ function App() {
       await completeLogin(await tokenResponse.json(), userVal);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Authentication failed.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -502,7 +498,7 @@ function App() {
   }, [conversations, isLoggedIn]);
 
   useEffect(() => {
-    if (route === "app" && !isLoggedIn) {
+    if ((route === "app" || route === "overview" || route === "projects") && !isLoggedIn) {
       navigate(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
     }
   }, [route, isLoggedIn]);
@@ -777,6 +773,7 @@ function App() {
     return (
       <AuthPage
         error={error}
+        isSubmitting={isSubmitting}
         isRegisterMode={route === "signup" || isRegisterMode}
         onModeChange={(registerMode) => {
           setIsRegisterMode(registerMode);
@@ -801,6 +798,20 @@ function App() {
     }
     return (
       <Projects
+        authenticatedFetch={authenticatedFetch}
+        navigate={navigate}
+        username={username}
+      />
+    );
+  }
+
+  if (route === "overview") {
+    if (!isLoggedIn) {
+      navigate(`/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+      return <main aria-busy="true">Checking authentication…</main>;
+    }
+    return (
+      <Overview
         authenticatedFetch={authenticatedFetch}
         navigate={navigate}
         username={username}
@@ -848,11 +859,16 @@ function App() {
               <PanelLeftClose size={18} />
             </button>
           </div>
+          <nav className="workspace-navigation" aria-label="Workspace navigation">
+            <button onClick={() => navigate("/overview")}>
+              <LayoutDashboard size={16} /> Overview
+            </button>
+            <button onClick={() => navigate("/projects")}>
+              <FolderKanban size={16} /> Projects
+            </button>
+          </nav>
           <button className="new-chat" onClick={newChat}>
             <Plus size={17} /> New chat <span className="shortcut">Ctrl K</span>
-          </button>
-          <button className="new-chat projects-nav" onClick={() => navigate("/projects")}>
-            <FolderKanban size={17} /> Projects
           </button>
           <div className="sidebar-search">
             <Search size={16} />
