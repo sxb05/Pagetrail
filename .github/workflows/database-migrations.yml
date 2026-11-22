@@ -1,0 +1,50 @@
+name: Controlled Database Migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type APPLY-002 to run the project-operations migration'
+        required: true
+        type: string
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    environment: production-migrations
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install migration dependencies
+        run: python -m pip install -r backend/requirements.txt
+
+      - name: Validate confirmation
+        run: |
+          test "${{ inputs.confirmation }}" = "APPLY-002"
+
+      - name: Read-only migration preflight
+        env:
+          PYTHONPATH: backend
+          ALEMBIC_DATABASE_URL: ${{ secrets.ALEMBIC_DATABASE_URL }}
+        run: python backend/scripts/verify_migration_target.py
+
+      - name: Apply project operations migration
+        env:
+          PYTHONPATH: backend
+          ALEMBIC_DATABASE_URL: ${{ secrets.ALEMBIC_DATABASE_URL }}
+        run: |
+          python -m alembic -c backend/alembic.ini upgrade 002_project_operations
+
+      - name: Verify migration result
+        env:
+          PYTHONPATH: backend
+          ALEMBIC_DATABASE_URL: ${{ secrets.ALEMBIC_DATABASE_URL }}
+        run: |
+          python -m alembic -c backend/alembic.ini current
+          python -m alembic -c backend/alembic.ini check

@@ -15,6 +15,37 @@ depends_on = None
 
 
 def upgrade() -> None:
+    baseline_tables = {
+        "users",
+        "conversations",
+        "chat_messages",
+        "long_term_memory",
+        "rag_documents",
+        "checkpoints",
+        "checkpoint_blobs",
+        "checkpoint_writes",
+        "checkpoint_migrations",
+        "keep_alive_logs",
+    }
+    try:
+        existing_tables = set(
+            sa.inspect(op.get_bind()).get_table_names(schema="public")
+        )
+    except Exception:
+        existing_tables = set()
+
+    existing_baseline = baseline_tables.intersection(existing_tables)
+    if existing_baseline:
+        if existing_baseline != baseline_tables:
+            raise RuntimeError(
+                "Existing database schema matches only part of the production "
+                "baseline. Refuse migration until a read-only schema comparison "
+                "is completed."
+            )
+        # Existing Pagetrail data is already present. This revision is a
+        # forward-only baseline marker and makes no schema or data changes.
+        return
+
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 
     op.create_table(

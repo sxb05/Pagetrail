@@ -108,29 +108,31 @@ python -m alembic -c backend/alembic.ini check
 ## Production procedure
 
 1. Export a verified backup or Supabase point-in-time backup.
-2. Run the read-only catalog comparison documented in the database report.
-3. Confirm every baseline table, column, constraint, and index matches before
-   stamping `001_existing_production`.
-4. Set `ALEMBIC_DATABASE_URL` to the reviewed production migration URL.
-5. Confirm the printed host and database on a terminal session before the next
-   command.
-6. Stamp only after verification:
+2. Run the read-only target preflight in the GitHub migration workflow or
+   locally against a reviewed production connection.
+3. Confirm every baseline table, column, constraint, and index matches.
+4. Confirm no project-operation tables exist, or stop if migration 002 has
+   already been applied.
+5. Set `ALEMBIC_DATABASE_URL` to the reviewed production migration URL.
+6. Confirm the printed host and database on a terminal session.
+7. Run the migration only from the manual, environment-approved GitHub
+   workflow. The workflow never stamps revisions and never runs on application
+   startup or normal GitHub auto-deploy.
+
+For an operator review, use:
 
 ```powershell
-python -m alembic -c backend/alembic.ini stamp 001_existing_production
-```
-
-This command is intentionally never run automatically. Then review and apply
-the reviewed 002 migration manually during a maintenance window:
-
-```powershell
+$env:PYTHONPATH="backend"
+$env:ALEMBIC_DATABASE_URL="postgresql+psycopg://<migration-user>:<password>@<host>:5432/<database>"
+python backend/scripts/verify_migration_target.py
 python -m alembic -c backend/alembic.ini upgrade 002_project_operations
 python -m alembic -c backend/alembic.ini current
 python -m alembic -c backend/alembic.ini check
 ```
 
-Do not run `upgrade head` until an authorized operator has reviewed the exact
-head and target. 002 deliberately has no destructive downgrade.
+This path applies 001 as a no-op baseline against an existing production
+schema, then applies 002. It never uses `stamp head`, `stamp 001`, or
+`Base.metadata.create_all()` as migration replacements.
 
 ## Failed migration
 

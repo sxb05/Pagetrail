@@ -19,3 +19,5 @@ chroma/
 data
 chroma_db
 g_Oauth.json
+
+.env.example
