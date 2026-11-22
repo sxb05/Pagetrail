@@ -1,6 +1,6 @@
 import os
 
-os.environ.setdefault("JWT_SECRET_KEY", "test-only-jwt-secret-key-at-least-32-characters")
+os.environ["JWT_SECRET_KEY"] = "test-only-jwt-secret-key-at-least-32-characters"
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event

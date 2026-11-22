@@ -19,6 +19,7 @@ jobs:
       PYTHONPATH: backend
       PAGETRAIL_GUARDRAILS: "false"
       GOOGLE_CLIENT_ID: "://googleusercontent.com"
+      JWT_SECRET_KEY: "test-only-ci-jwt-secret-key-at-least-32-characters"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -65,6 +66,7 @@ jobs:
           container_id="$(docker run -d --rm -p 18081:18081 \
             -e PORT=18081 \
             -e PAGETRAIL_GUARDRAILS=false \
+            -e JWT_SECRET_KEY=test-only-ci-jwt-secret-key-at-least-32-characters \
             pagetrail-ci)"
           cleanup() { docker rm -f "$container_id" >/dev/null 2>&1 || true; }
           trap cleanup EXIT
