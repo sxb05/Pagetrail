@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import "./Landing.css";
 import GridScan from "./GridScan";
 import brandLogoUrl from "./assets/pagetrail-icon.png";
@@ -23,6 +23,7 @@ export default function Landing({ onEnterApp, onLogin, onSignup }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [demoStep, setDemoStep] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState("top");
 
   useEffect(() => {
     const root = rootRef.current;
@@ -44,6 +45,40 @@ export default function Landing({ onEnterApp, onLogin, onSignup }: Props) {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    const sections = ["top", "product", "features", "how-it-works", "workspace"]
+      .map((id) => document.getElementById(id))
+      .filter((section): section is HTMLElement => !!section);
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (visible?.target.id) setActiveSection(visible.target.id);
+      },
+      { rootMargin: "-18% 0px -58% 0px", threshold: [0.05, 0.25, 0.5] },
+    );
+
+    sections.forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
+  }, []);
+
+  const scrollToSection = (event: MouseEvent<HTMLAnchorElement>, id: string) => {
+    event.preventDefault();
+    setMobileMenuOpen(false);
+    setActiveSection(id);
+
+    const section = document.getElementById(id);
+    if (!section) return;
+
+    window.history.pushState(null, "", `#${id}`);
+    section.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      block: "start",
+    });
+  };
+
   return (
     <main className="landing-root" ref={rootRef}>
       <section className="hero" id="top">
@@ -56,16 +91,16 @@ export default function Landing({ onEnterApp, onLogin, onSignup }: Props) {
           clickEffect="ping"
         />
         <header className="nav">
-          <a href="#top" className="brand" aria-label="Pagetrail home">
+          <a href="#top" className="brand" aria-label="Pagetrail home" onClick={(event) => scrollToSection(event, "top")}>
             <span className="brand-mark"><img src={brandLogoUrl} alt="" aria-hidden="true" /></span>
             <span>Pagetrail</span>
           </a>
 
           <nav className={`nav-links ${mobileMenuOpen ? "nav-links--open" : ""}`} aria-label="Primary navigation">
-            <a href="#product" onClick={() => setMobileMenuOpen(false)}>Product</a>
-            <a href="#features" onClick={() => setMobileMenuOpen(false)}>Features</a>
-            <a href="#how-it-works" onClick={() => setMobileMenuOpen(false)}>How it works</a>
-            <a href="#workspace" onClick={() => setMobileMenuOpen(false)}>Workspace</a>
+            <a className={activeSection === "product" ? "active" : ""} href="#product" onClick={(event) => scrollToSection(event, "product")}>Product</a>
+            <a className={activeSection === "features" ? "active" : ""} href="#features" onClick={(event) => scrollToSection(event, "features")}>Features</a>
+            <a className={activeSection === "how-it-works" ? "active" : ""} href="#how-it-works" onClick={(event) => scrollToSection(event, "how-it-works")}>How it works</a>
+            <a className={activeSection === "workspace" ? "active" : ""} href="#workspace" onClick={(event) => scrollToSection(event, "workspace")}>Workspace</a>
           </nav>
 
           <div className="nav-actions">
@@ -244,8 +279,8 @@ export default function Landing({ onEnterApp, onLogin, onSignup }: Props) {
       </section>
 
       <footer className="landing-footer">
-        <a href="#top" className="brand"><span className="brand-mark"><img src={brandLogoUrl} alt="" /></span><span>Pagetrail</span></a>
-        <nav aria-label="Footer navigation"><a href="#product">Product</a><a href="#features">Features</a><a href="#how-it-works">How it works</a></nav>
+        <a href="#top" className="brand" onClick={(event) => scrollToSection(event, "top")}><span className="brand-mark"><img src={brandLogoUrl} alt="" /></span><span>Pagetrail</span></a>
+        <nav aria-label="Footer navigation"><a href="#product" onClick={(event) => scrollToSection(event, "product")}>Product</a><a href="#features" onClick={(event) => scrollToSection(event, "features")}>Features</a><a href="#how-it-works" onClick={(event) => scrollToSection(event, "how-it-works")}>How it works</a></nav>
         <span>© 2026 Pagetrail</span>
       </footer>
     </main>

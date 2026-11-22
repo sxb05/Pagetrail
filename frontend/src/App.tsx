@@ -50,7 +50,7 @@ function protectedRedirect(): string {
   const redirect = new URLSearchParams(window.location.search).get("redirect");
   return redirect && (redirect === "/app" || redirect.startsWith("/chat/") || redirect === "/overview" || redirect === "/projects" || redirect.startsWith("/projects/"))
     ? redirect
-    : "/app";
+    : "/overview";
 }
 
 function formatFileSize(bytes?: number): string {
@@ -299,6 +299,9 @@ function App() {
     ) {
       return "app";
     }
+    if (path === "/" && localStorage.getItem("access_token")) {
+      return "overview";
+    }
     return routeForPath(path);
   });
 
@@ -309,7 +312,12 @@ function App() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(() => {
+    if (window.location.pathname === "/app") {
+      return new URLSearchParams(window.location.search).get("prompt") || "";
+    }
+    return "";
+  });
   const [loading, setLoading] = useState(false);
 
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
@@ -352,7 +360,7 @@ function App() {
   };
 
   const enterApp = () => {
-    navigate(isLoggedIn ? "/app" : "/login");
+    navigate(isLoggedIn ? "/overview" : "/login");
   };
 
   const authenticatedFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
@@ -470,7 +478,12 @@ function App() {
       const nextRoute = routeForPath(window.location.pathname);
       setRoute(nextRoute);
       window.requestAnimationFrame(() => {
-        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+        const hash = window.location.hash.slice(1);
+        if (hash) {
+          document.getElementById(hash)?.scrollIntoView({ block: "start", behavior: "auto" });
+        } else {
+          window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+        }
       });
     };
     window.addEventListener("popstate", handlePopState);
@@ -481,6 +494,12 @@ function App() {
     const isPublicRoute = route === "landing" || route === "login" || route === "signup" || route === "not-found";
     document.documentElement.classList.toggle("public-route", isPublicRoute);
     document.body.classList.toggle("public-route", isPublicRoute);
+  }, [route]);
+
+  useEffect(() => {
+    if (route !== "app") return;
+    const prompt = new URLSearchParams(window.location.search).get("prompt");
+    if (prompt) setInput(prompt);
   }, [route]);
 
   useEffect(() => {
@@ -826,6 +845,7 @@ function App() {
         authenticatedFetch={authenticatedFetch}
         navigate={navigate}
         username={username}
+        onLogout={handleLogout}
       />
     );
   }
@@ -876,6 +896,9 @@ function App() {
             </button>
             <button onClick={() => navigate("/projects")}>
               <FolderKanban size={16} /> Projects
+            </button>
+            <button onClick={() => navigate("/app")}>
+              <MessageSquare size={16} /> AI Assistant
             </button>
           </nav>
           <button className="new-chat" onClick={newChat}>

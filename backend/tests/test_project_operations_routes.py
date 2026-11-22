@@ -81,6 +81,15 @@ def test_project_operations_authorization_and_dependency_cycle():
     assert first.status_code == 201
     assert second.status_code == 201
 
+    details = client.get("/api/projects/overview/details", headers=headers)
+    assert details.status_code == 200
+    details_data = details.json()
+    assert len(details_data["pending_tasks"]) == 2
+    assert details_data["upcoming_milestones"] == []
+    assert details_data["recent_activity"]
+    assert details_data["pending_approvals"] == []
+    assert details_data["agent_insights"] == []
+
     first_id = first.json()["id"]
     second_id = second.json()["id"]
     dependency = client.post(

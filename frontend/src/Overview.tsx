@@ -1,13 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   ArrowRight,
   CalendarDays,
   CheckCircle2,
   CircleAlert,
+  Clock3,
   FolderKanban,
   LayoutList,
+  LayoutDashboard,
+  LogOut,
   MessageSquare,
   Plus,
+  Search,
   ShieldCheck,
 } from "lucide-react";
 
@@ -28,13 +32,49 @@ type Project = {
   updated_at: string;
 };
 
+type PendingTask = {
+  id: number;
+  project_id: number;
+  project_name?: string | null;
+  title: string;
+  status: string;
+  priority: string;
+  due_date?: string | null;
+};
+
+type UpcomingMilestone = {
+  id: number;
+  project_id: number;
+  project_name?: string | null;
+  title: string;
+  status: string;
+  due_date?: string | null;
+};
+
+type RecentActivity = {
+  type: "project" | "task" | "milestone";
+  title: string;
+  detail: string;
+  occurred_at?: string | null;
+  project_id: number;
+};
+
+type OverviewDetails = {
+  pending_tasks: PendingTask[];
+  upcoming_milestones: UpcomingMilestone[];
+  recent_activity: RecentActivity[];
+  pending_approvals: Array<{ id: number; action_type: string; requested_at: string }>;
+  agent_insights: string[];
+};
+
 type Props = {
   authenticatedFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
   navigate: (path: string) => void;
   username: string;
+  onLogout: () => void;
 };
 
-export default function Overview({ authenticatedFetch, navigate, username }: Props) {
+export default function Overview({ authenticatedFetch, navigate, username, onLogout }: Props) {
   const [metrics, setMetrics] = useState<Metrics>({
     active_projects: 0,
     total_tasks: 0,
@@ -43,6 +83,14 @@ export default function Overview({ authenticatedFetch, navigate, username }: Pro
     blocked_tasks: 0,
   });
   const [projects, setProjects] = useState<Project[]>([]);
+  const [details, setDetails] = useState<OverviewDetails>({
+    pending_tasks: [],
+    upcoming_milestones: [],
+    recent_activity: [],
+    pending_approvals: [],
+    agent_insights: [],
+  });
+  const [askText, setAskText] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -51,15 +99,17 @@ export default function Overview({ authenticatedFetch, navigate, username }: Pro
       setLoading(true);
       setError("");
       try {
-        const [metricsResponse, projectsResponse] = await Promise.all([
+        const [metricsResponse, projectsResponse, detailsResponse] = await Promise.all([
           authenticatedFetch("/api/projects/overview/metrics"),
           authenticatedFetch("/api/projects"),
+          authenticatedFetch("/api/projects/overview/details"),
         ]);
-        if (!metricsResponse.ok || !projectsResponse.ok) {
+        if (!metricsResponse.ok || !projectsResponse.ok || !detailsResponse.ok) {
           throw new Error("Unable to load operations overview.");
         }
         setMetrics(await metricsResponse.json());
         setProjects(await projectsResponse.json());
+        setDetails(await detailsResponse.json());
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : "Unable to load overview.");
       } finally {
@@ -73,16 +123,43 @@ export default function Overview({ authenticatedFetch, navigate, username }: Pro
     ? Math.round((metrics.completed_tasks / metrics.total_tasks) * 100)
     : 0;
 
+  const askPagetrail = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const prompt = askText.trim();
+    if (!prompt) return;
+    navigate(`/app?prompt=${encodeURIComponent(prompt)}`);
+  };
+
   return (
     <main className="operations-shell overview-shell">
-      <header className="operations-topbar">
-        <button className="operations-back" onClick={() => navigate("/app")}>
-          <MessageSquare size={16} /> Chat
+      <aside className="overview-sidebar">
+        <button className="overview-brand" onClick={() => navigate("/")} aria-label="Pagetrail overview">
+          <span className="overview-brand-mark">P</span>
+          <strong>Pagetrail</strong>
         </button>
-        <span className="operations-user">{username}</span>
-      </header>
+        <nav className="overview-navigation" aria-label="Workspace navigation">
+          <button className="active" onClick={() => navigate("/overview")}><LayoutDashboard size={16} /> Overview</button>
+          <button onClick={() => navigate("/projects")}><FolderKanban size={16} /> Projects</button>
+          <button onClick={() => navigate("/app")}><MessageSquare size={16} /> AI Assistant</button>
+          <button className="overview-signout-mobile" onClick={onLogout}><LogOut size={16} /> Sign out</button>
+        </nav>
+        <div className="overview-user">
+          <span>{username.slice(0, 1).toUpperCase()}</span>
+          <small>{username}</small>
+          <button type="button" onClick={onLogout} aria-label="Sign out" title="Sign out"><LogOut size={16} /></button>
+        </div>
+      </aside>
 
-      <div className="overview-dashboard">
+      <div className="overview-main">
+        <header className="operations-topbar overview-topbar">
+          <span>Overview</span>
+          <button className="operations-back" onClick={() => navigate("/app")}>
+            <MessageSquare size={16} /> AI Assistant
+          </button>
+          <span className="operations-user">{username}</span>
+        </header>
+
+        <div className="overview-dashboard">
         <header className="overview-header">
           <div>
             <p className="operations-kicker">Operations overview</p>
@@ -93,6 +170,19 @@ export default function Overview({ authenticatedFetch, navigate, username }: Pro
             <Plus size={16} /> Open projects
           </button>
         </header>
+
+        <form className="overview-ask" onSubmit={askPagetrail}>
+          <Search size={18} aria-hidden="true" />
+          <input
+            value={askText}
+            onChange={(event) => setAskText(event.target.value)}
+            placeholder="Ask Pagetrail about a project, task or milestone"
+            aria-label="Ask Pagetrail"
+          />
+          <button type="submit" disabled={!askText.trim()}>
+            Ask <ArrowRight size={15} />
+          </button>
+        </form>
 
         {error && <div className="operations-error">{error}</div>}
 
@@ -186,15 +276,87 @@ export default function Overview({ authenticatedFetch, navigate, username }: Pro
               )}
             </section>
 
-            <section className="overview-note">
-              <ShieldCheck size={18} />
-              <div>
-                <strong>Agent activity is not yet connected</strong>
-                <p>Pending approvals and agent-generated insights will appear here once those backend workflows are implemented.</p>
+            <section className="overview-grid overview-detail-grid">
+              <div className="overview-panel">
+                <header>
+                  <div><p>Work queue</p><h2>Pending tasks</h2></div>
+                  <Clock3 size={17} />
+                </header>
+                {details.pending_tasks.length === 0 ? (
+                  <div className="overview-empty compact"><CheckCircle2 size={20} /><h3>No pending tasks</h3><p>All visible project tasks are completed.</p></div>
+                ) : (
+                  <div className="overview-list">
+                    {details.pending_tasks.map((task) => (
+                      <button key={task.id} onClick={() => navigate(`/projects/${task.project_id}`)}>
+                        <span><strong>{task.title}</strong><small>{task.project_name || `Project ${task.project_id}`}</small></span>
+                        <span className={`status status-${task.status}`}>{task.status.replace("_", " ")}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="overview-panel">
+                <header>
+                  <div><p>Schedule</p><h2>Upcoming milestones</h2></div>
+                  <CalendarDays size={17} />
+                </header>
+                {details.upcoming_milestones.length === 0 ? (
+                  <div className="overview-empty compact"><CalendarDays size={20} /><h3>No upcoming milestones</h3><p>Add milestones to a project to see them here.</p></div>
+                ) : (
+                  <div className="overview-list">
+                    {details.upcoming_milestones.map((milestone) => (
+                      <button key={milestone.id} onClick={() => navigate(`/projects/${milestone.project_id}`)}>
+                        <span><strong>{milestone.title}</strong><small>{milestone.project_name || `Project ${milestone.project_id}`}</small></span>
+                        <small>{milestone.due_date ? new Date(milestone.due_date).toLocaleDateString() : "No date"}</small>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="overview-grid overview-detail-grid">
+              <div className="overview-panel">
+                <header>
+                  <div><p>Recent activity</p><h2>Latest changes</h2></div>
+                </header>
+                {details.recent_activity.length === 0 ? (
+                  <div className="overview-empty compact"><Clock3 size={20} /><h3>No recent activity</h3><p>Project updates will appear here.</p></div>
+                ) : (
+                  <div className="overview-list">
+                    {details.recent_activity.map((activity, index) => (
+                      <button key={`${activity.type}-${activity.project_id}-${index}`} onClick={() => navigate(`/projects/${activity.project_id}`)}>
+                        <span><strong>{activity.title}</strong><small>{activity.detail}</small></span>
+                        <small>{activity.occurred_at ? new Date(activity.occurred_at).toLocaleDateString() : ""}</small>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="overview-panel">
+                <header>
+                  <div><p>Agent</p><h2>Insights and approvals</h2></div>
+                  <ShieldCheck size={17} />
+                </header>
+                {details.agent_insights.length === 0 && details.pending_approvals.length === 0 ? (
+                  <div className="overview-empty compact"><ShieldCheck size={20} /><h3>No agent activity</h3><p>Agent insights and pending approvals will appear here when available.</p></div>
+                ) : (
+                  <div className="overview-list">
+                    {details.pending_approvals.map((approval) => (
+                      <button key={approval.id} onClick={() => navigate("/projects")}>
+                        <span><strong>{approval.action_type}</strong><small>Pending approval</small></span>
+                        <small>{new Date(approval.requested_at).toLocaleDateString()}</small>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </section>
           </>
         )}
+        </div>
       </div>
     </main>
   );

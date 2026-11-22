@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.api.routes.auth import CurrentUser, get_db
 from app.db.models import (
+    AgentApproval,
+    AgentRun,
     DocumentProcessingStatus,
     MeetingNote,
     Milestone,
@@ -236,6 +238,146 @@ def project_metrics(current_user: CurrentUser, db: Annotated[Session, Depends(ge
             for task in tasks
         ),
         "blocked_tasks": sum(task.status == "blocked" for task in tasks),
+    }
+
+
+@router.get("/api/projects/overview/details")
+def project_overview_details(current_user: CurrentUser, db: Annotated[Session, Depends(get_db)]):
+    project_ids = [
+        row.project_id
+        for row in db.query(ProjectMember.project_id)
+        .filter(ProjectMember.user_id == current_user.id)
+        .all()
+    ]
+    if not project_ids:
+        return {
+            "pending_tasks": [],
+            "upcoming_milestones": [],
+            "recent_activity": [],
+            "pending_approvals": [],
+            "agent_insights": [],
+        }
+
+    now = datetime.now(timezone.utc)
+    projects = db.query(Project).filter(Project.id.in_(project_ids)).all()
+    project_names = {project.id: project.name for project in projects}
+
+    pending_tasks = (
+        db.query(Task)
+        .filter(Task.project_id.in_(project_ids), Task.status != TaskStatus.DONE.value)
+        .order_by(Task.updated_at.desc(), Task.id.desc())
+        .limit(8)
+        .all()
+    )
+    pending_task_items = [
+        {
+            "id": task.id,
+            "project_id": task.project_id,
+            "project_name": project_names.get(task.project_id),
+            "title": task.title,
+            "status": task.status,
+            "priority": task.priority,
+            "due_date": task.due_date.isoformat() if task.due_date else None,
+        }
+        for task in pending_tasks
+    ]
+
+    upcoming_milestones = (
+        db.query(Milestone)
+        .filter(
+            Milestone.project_id.in_(project_ids),
+            Milestone.status != "completed",
+            Milestone.due_date.is_not(None),
+        )
+        .order_by(Milestone.due_date.asc())
+        .limit(8)
+        .all()
+    )
+    upcoming_milestone_items = [
+        {
+            "id": milestone.id,
+            "project_id": milestone.project_id,
+            "project_name": project_names.get(milestone.project_id),
+            "title": milestone.title,
+            "status": milestone.status,
+            "due_date": milestone.due_date.isoformat() if milestone.due_date else None,
+        }
+        for milestone in upcoming_milestones
+        if milestone.due_date is not None
+        and (milestone.due_date.replace(tzinfo=timezone.utc) if milestone.due_date.tzinfo is None else milestone.due_date) >= now
+    ]
+
+    activity = []
+    for project in projects:
+        activity.append({
+            "type": "project",
+            "title": project.name,
+            "detail": f"Project is {project.status}",
+            "occurred_at": project.updated_at,
+            "project_id": project.id,
+        })
+    tasks_for_activity = (
+        db.query(Task)
+        .filter(Task.project_id.in_(project_ids))
+        .order_by(Task.updated_at.desc())
+        .limit(8)
+        .all()
+    )
+    for task in tasks_for_activity:
+        activity.append({
+            "type": "task",
+            "title": task.title,
+            "detail": f"Task is {task.status}",
+            "occurred_at": task.updated_at,
+            "project_id": task.project_id,
+        })
+    milestones_for_activity = (
+        db.query(Milestone)
+        .filter(Milestone.project_id.in_(project_ids))
+        .order_by(Milestone.updated_at.desc())
+        .limit(8)
+        .all()
+    )
+    for milestone in milestones_for_activity:
+        activity.append({
+            "type": "milestone",
+            "title": milestone.title,
+            "detail": f"Milestone is {milestone.status}",
+            "occurred_at": milestone.updated_at.isoformat(),
+            "project_id": milestone.project_id,
+        })
+    activity.sort(
+        key=lambda item: str(item["occurred_at"] or ""),
+        reverse=True,
+    )
+
+    pending_approvals = (
+        db.query(AgentApproval)
+        .join(AgentRun, AgentApproval.agent_run_id == AgentRun.id)
+        .filter(
+            AgentRun.project_id.in_(project_ids),
+            AgentApproval.status == "pending",
+        )
+        .order_by(AgentApproval.requested_at.desc())
+        .limit(8)
+        .all()
+    )
+    pending_approval_items = [
+        {
+            "id": approval.id,
+            "agent_run_id": approval.agent_run_id,
+            "action_type": approval.action_type,
+            "requested_at": approval.requested_at.isoformat(),
+        }
+        for approval in pending_approvals
+    ]
+
+    return {
+        "pending_tasks": pending_task_items,
+        "upcoming_milestones": upcoming_milestone_items,
+        "recent_activity": activity[:8],
+        "pending_approvals": pending_approval_items,
+        "agent_insights": [],
     }
 
 
