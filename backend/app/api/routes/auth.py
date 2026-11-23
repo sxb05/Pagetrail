@@ -20,6 +20,7 @@ from app.db.models import User
 from app.db.session import SessionLocal
 from app.schemas.auth import GoogleCredential, TokenResponse, UserCreate, UserResponse
 from app.core.config import settings
+from app.services.project_operations import ensure_personal_organization
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
@@ -160,6 +161,8 @@ def register(user_data: UserCreate, db: Annotated[Session, Depends(get_db)]) -> 
     )
     db.add(user)
     try:
+        db.flush()
+        ensure_personal_organization(db, user)
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -259,6 +262,9 @@ def google_login(
             password_hash=None,
         )
         db.add(user)
+        db.flush()
+
+    ensure_personal_organization(db, user)
 
     try:
         db.commit()

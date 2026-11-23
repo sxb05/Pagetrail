@@ -4,7 +4,7 @@ Revision ID: 001_existing_production
 Revises: none
 """
 
-from alembic import op
+from alembic import context, op
 import sqlalchemy as sa
 from pgvector.sqlalchemy import Vector
 
@@ -14,37 +14,115 @@ branch_labels = None
 depends_on = None
 
 
-def upgrade() -> None:
-    baseline_tables = {
-        "users",
-        "conversations",
-        "chat_messages",
-        "long_term_memory",
-        "rag_documents",
-        "checkpoints",
-        "checkpoint_blobs",
-        "checkpoint_writes",
-        "checkpoint_migrations",
-        "keep_alive_logs",
-    }
-    try:
-        existing_tables = set(
-            sa.inspect(op.get_bind()).get_table_names(schema="public")
-        )
-    except Exception:
-        existing_tables = set()
+BASELINE_TABLES = {
+    "users",
+    "conversations",
+    "chat_messages",
+    "long_term_memory",
+    "rag_documents",
+    "checkpoints",
+    "checkpoint_blobs",
+    "checkpoint_writes",
+    "checkpoint_migrations",
+    "keep_alive_logs",
+}
 
-    existing_baseline = baseline_tables.intersection(existing_tables)
-    if existing_baseline:
-        if existing_baseline != baseline_tables:
-            raise RuntimeError(
-                "Existing database schema matches only part of the production "
-                "baseline. Refuse migration until a read-only schema comparison "
-                "is completed."
-            )
-        # Existing Pagetrail data is already present. This revision is a
-        # forward-only baseline marker and makes no schema or data changes.
+BASELINE_COLUMNS = {
+    "users": {"id", "username", "password_hash", "email", "google_sub"},
+    "conversations": {"id", "thread_id", "user_id", "name", "created_at", "updated_at"},
+    "chat_messages": {"id", "thread_id", "user_id", "role", "content", "created_at", "updated_at"},
+    "long_term_memory": {"id", "thread_id", "user_id", "content", "created_at", "updated_at"},
+    "rag_documents": {"id", "thread_id", "content", "source", "embedding", "embedding_vector"},
+    "checkpoints": {"thread_id", "checkpoint_ns", "checkpoint_id", "parent_checkpoint_id", "type", "checkpoint", "metadata"},
+    "checkpoint_blobs": {"thread_id", "checkpoint_ns", "channel", "version", "type", "blob"},
+    "checkpoint_writes": {"thread_id", "checkpoint_ns", "checkpoint_id", "task_id", "idx", "channel", "type", "blob", "task_path"},
+    "checkpoint_migrations": {"v"},
+    "keep_alive_logs": {"id", "pinged_at"},
+}
+
+BASELINE_PRIMARY_KEYS = {
+    "users": {"id"},
+    "conversations": {"id"},
+    "chat_messages": {"id"},
+    "long_term_memory": {"id"},
+    "rag_documents": {"id"},
+    "checkpoints": {"thread_id", "checkpoint_ns", "checkpoint_id"},
+    "checkpoint_blobs": {"thread_id", "checkpoint_ns", "channel", "version"},
+    "checkpoint_writes": {"thread_id", "checkpoint_ns", "checkpoint_id", "task_id", "idx"},
+    "checkpoint_migrations": {"v"},
+    "keep_alive_logs": {"id"},
+}
+
+
+def _verify_existing_baseline(bind) -> None:
+    inspector = sa.inspect(bind)
+    existing_tables = set(inspector.get_table_names(schema="public"))
+    existing_baseline = BASELINE_TABLES & existing_tables
+    if not existing_baseline:
         return
+    missing_tables = sorted(BASELINE_TABLES - existing_tables)
+    if missing_tables:
+        raise RuntimeError(
+            "Existing database schema is partial and missing baseline tables: "
+            + ", ".join(missing_tables)
+        )
+
+    mismatches = []
+    for table_name, required_columns in BASELINE_COLUMNS.items():
+        actual_columns = {
+            column["name"]: column
+            for column in inspector.get_columns(table_name, schema="public")
+        }
+        missing = sorted(set(required_columns) - set(actual_columns))
+        if missing:
+            mismatches.append(f"{table_name} missing columns: {', '.join(missing)}")
+            continue
+
+        pk = inspector.get_pk_constraint(table_name, schema="public")
+        if set(pk.get("constrained_columns", [])) != BASELINE_PRIMARY_KEYS[table_name]:
+            mismatches.append(f"{table_name} primary key")
+
+    if mismatches:
+        raise RuntimeError(
+            "Existing database baseline verification failed: "
+            + "; ".join(mismatches)
+        )
+
+    actual_vector_type = bind.execute(
+        sa.text(
+            """
+            SELECT format_type(a.atttypid, a.atttypmod) AS actual_type
+            FROM pg_attribute a
+            JOIN pg_class c ON c.oid = a.attrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public'
+              AND c.relname = 'rag_documents'
+              AND a.attname = 'embedding_vector'
+              AND a.attnum > 0
+              AND NOT a.attisdropped
+            """
+        )
+    ).scalar_one_or_none()
+    if actual_vector_type != "vector(3072)":
+        raise RuntimeError(
+            "Existing database baseline verification failed: "
+            "rag_documents.embedding_vector must be vector(3072), found "
+            + (actual_vector_type or "missing")
+        )
+
+
+def upgrade() -> None:
+    if context.is_offline_mode():
+        # Static SQL generation cannot inspect a live schema.
+        pass
+    else:
+        _verify_existing_baseline(op.get_bind())
+        inspector = sa.inspect(op.get_bind())
+        existing_tables = set(inspector.get_table_names(schema="public"))
+        if BASELINE_TABLES.issubset(existing_tables):
+            # Existing Pagetrail data is already present. This revision is a
+            # forward-only baseline marker and makes no schema or data changes.
+            return
 
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
 

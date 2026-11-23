@@ -29,6 +29,29 @@ def test_guardrails_module_does_not_import_ml_detectors_when_disabled():
     )
 
 
+def test_legacy_initializer_refuses_without_explicit_local_permission():
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1])
+    env.pop("PAGETRAIL_ALLOW_LEGACY_INIT", None)
+    env.pop("ALEMBIC_DATABASE_URL", None)
+    code = (
+        "from app.db.session import init_db\n"
+        "try:\n"
+        "    init_db()\n"
+        "except RuntimeError as exc:\n"
+        "    assert 'PAGETRAIL_ALLOW_LEGACY_INIT=true' in str(exc)\n"
+        "else:\n"
+        "    raise AssertionError('legacy initializer was not blocked')\n"
+    )
+    subprocess.run(
+        [sys.executable, "-c", code],
+        check=True,
+        env=env,
+        cwd=Path(__file__).resolve().parents[2],
+        timeout=20,
+    )
+
+
 
 def test_liveness_and_readiness_are_separate_without_database_config():
     env = os.environ.copy()

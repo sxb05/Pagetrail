@@ -4,9 +4,10 @@
 
 - Migrations are version-controlled Alembic operations.
 - FastAPI startup does not execute migrations or call schema mutation helpers.
-- Legacy `init_db()` and `init_rag_db()` remain callable for backward
-  compatibility. They still perform schema operations; do not run the legacy
-  initializer against production during migration rollout.
+- Legacy `init_db()`, `init_rag_db()` and `init_database.main()` remain callable
+  as backward-compatible explicit local-development wrappers. They require
+  `PAGETRAIL_ALLOW_LEGACY_INIT=true` and `ALEMBIC_DATABASE_URL`, refuse remote
+  hosts, and invoke Alembic instead of calling `create_all()`.
 - Do not stamp or upgrade production until a read-only schema comparison is
   complete and the baseline matches.
 - Never commit database URLs or credentials.
@@ -14,18 +15,16 @@
 
 ## Legacy initialization behavior
 
-`app.db.session.init_db()` uses `Base.metadata.create_all()`, then enables RLS
-for a hard-coded table list and conditionally adds legacy columns/indexes.
-`app.services.rag.init_rag_db()` uses `rag.metadata.create_all()` to create or
-add the RAG table. `app.scripts.init_database.main()` checks pgvector, calls
-`init_rag_db()`, calls `init_db()`, and logs success.
+`app.db.session.init_db()` is an explicit local-development compatibility
+wrapper. It requires `PAGETRAIL_ALLOW_LEGACY_INIT=true` and
+`ALEMBIC_DATABASE_URL`, refuses remote hosts, and invokes Alembic. It does not
+fall back to `DATABASE_URL` or `DATABASE_ADMIN_URL`.
+`app.services.rag.init_rag_db()` delegates to the same Alembic wrapper.
+`app.scripts.init_database.main()` delegates to the same wrapper and is
+deprecated.
 
-These functions are preserved unchanged for backward compatibility in this
-initial implementation. FastAPI lifespan does not call them. Their behavior
-remains supported for older deployment scripts, but it competes with Alembic
-and must not be used for the validated migration rollout. Refactoring these
-helpers into read-only validation utilities is deferred until migration
-autogeneration and application regression tests are proven.
+FastAPI lifespan does not call any of these functions. Render deployments
+must not run legacy initialization or migrations automatically.
 
 ## Initial revisions
 
@@ -33,7 +32,7 @@ autogeneration and application regression tests are proven.
   schema: users, conversations, chat messages, long-term memory, RAG documents,
   LangGraph checkpoint tables, keep-alive logs, pgvector, and the RLS state on
   existing application tables.
-- `002_project_operations_models` creates only the newly introduced project,
+- `002_project_operations` creates only the newly introduced project,
   organization, agent, integration, and audit tables.
 
 The baseline has not been stamped against production. The production schema
@@ -111,7 +110,7 @@ python -m alembic -c backend/alembic.ini check
 2. Run the read-only target preflight in the GitHub migration workflow or
    locally against a reviewed production connection.
 3. Confirm every baseline table, column, constraint, and index matches.
-4. Confirm no project-operation tables exist, or stop if migration 002 has
+4. Confirm no project-operation tables exist, or stop if migration 003 has
    already been applied.
 5. Set `ALEMBIC_DATABASE_URL` to the reviewed production migration URL.
 6. Confirm the printed host and database on a terminal session.
@@ -125,13 +124,13 @@ For an operator review, use:
 $env:PYTHONPATH="backend"
 $env:ALEMBIC_DATABASE_URL="postgresql+psycopg://<migration-user>:<password>@<host>:5432/<database>"
 python backend/scripts/verify_migration_target.py
-python -m alembic -c backend/alembic.ini upgrade 002_project_operations
+python -m alembic -c backend/alembic.ini upgrade 003_personal_organizations
 python -m alembic -c backend/alembic.ini current
 python -m alembic -c backend/alembic.ini check
 ```
 
 This path applies 001 as a no-op baseline against an existing production
-schema, then applies 002. It never uses `stamp head`, `stamp 001`, or
+schema, then applies 002 and 003. It never uses `stamp head`, `stamp 001`, or
 `Base.metadata.create_all()` as migration replacements.
 
 ## Failed migration

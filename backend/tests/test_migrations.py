@@ -45,6 +45,6 @@ def test_alembic_chain_has_one_head_and_rag_table_is_known():
     script = ScriptDirectory.from_config(config)
 
     heads = script.get_heads()
-    assert heads == ["002_project_operations"]
+    assert heads == ["003_personal_organizations"]
     assert rag_documents.name == "rag_documents"
     assert Base.metadata.tables["task_dependencies"].constraints

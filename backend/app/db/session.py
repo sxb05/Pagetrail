@@ -1,5 +1,9 @@
 import logging
+import os
+import subprocess
+import sys
 from datetime import datetime
+from pathlib import Path
 
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.engine import URL, make_url
@@ -162,69 +166,39 @@ def get_db():
         db.close()
 
 def init_db():
-    rls_tables = (
-        "users",
-        "conversations",
-        "chat_messages",
-        "long_term_memory",
-        "rag_documents",
-        "projects",
-        "project_members"
-        "tasks",
+    """Backward-compatible explicit development wrapper for Alembic."""
+    if os.getenv("PAGETRAIL_ALLOW_LEGACY_INIT", "").strip().lower() not in {"1", "true", "yes", "on"}:
+        raise RuntimeError(
+            "Legacy initialization requires PAGETRAIL_ALLOW_LEGACY_INIT=true "
+            "and is only available for development databases."
+        )
+    migration_url = os.getenv("ALEMBIC_DATABASE_URL", "").strip()
+    if not migration_url:
+        raise RuntimeError("ALEMBIC_DATABASE_URL is required; runtime DATABASE_URL is never used.")
+    url = make_url(migration_url)
+    if url.get_backend_name() not in {"postgresql", "postgres"}:
+        raise RuntimeError("ALEMBIC_DATABASE_URL must use PostgreSQL.")
+    if url.host not in {"localhost", "127.0.0.1", "::1"}:
+        raise RuntimeError(
+            "Legacy initialization is development-only and refuses remote hosts."
+        )
+    repo_root = Path(__file__).resolve().parents[3]
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "alembic",
+            "-c",
+            str(repo_root / "backend" / "alembic.ini"),
+            "upgrade",
+            "head",
+        ],
+        cwd=repo_root,
+        env={**os.environ, "PYTHONPATH": str(repo_root / "backend")},
+        check=False,
     )
-    migrations = {
-        "conversations": "user_id",
-        "chat_messages": "user_id",
-        "long_term_memory": "user_id",
-    }
-    with admin_engine.begin() as connection:
-        # Keep schema initialization and inspection on one connection and give
-        # remote PostgreSQL metadata queries enough time to complete.
-        connection.exec_driver_sql("SET LOCAL statement_timeout = '30s'")
-        Base.metadata.create_all(bind=connection)
-        inspector = inspect(connection)
-        for table_name in rls_tables:
-            connection.execute(
-                text(f"ALTER TABLE public.{table_name} ENABLE ROW LEVEL SECURITY")
-            )
-        for table_name, column_name in migrations.items():
-            existing_columns = {
-                column["name"] for column in inspector.get_columns(table_name)
-            }
-            if column_name not in existing_columns:
-                connection.execute(
-                    text(
-                        f"ALTER TABLE {table_name} ADD COLUMN {column_name} "
-                        "INTEGER REFERENCES users(id)"
-                    )
-                )
-        if connection.dialect.name == "postgresql":
-            connection.execute(
-                text("ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL")
-            )
-            existing_user_columns = {
-                column["name"] for column in inspector.get_columns("users")
-            }
-            if "email" not in existing_user_columns:
-                connection.execute(
-                    text("ALTER TABLE users ADD COLUMN email VARCHAR(255)")
-                )
-            if "google_sub" not in existing_user_columns:
-                connection.execute(
-                    text("ALTER TABLE users ADD COLUMN google_sub VARCHAR(255)")
-                )
-            connection.execute(
-                text(
-                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email_unique "
-                    "ON users (email)"
-                )
-            )
-            connection.execute(
-                text(
-                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_google_sub_unique "
-                    "ON users (google_sub)"
-                )
-            )
+    if result.returncode != 0:
+        raise RuntimeError("Development Alembic migration failed.")
 
 
 def create_update_convo(

@@ -93,6 +93,7 @@ export default function Overview({ authenticatedFetch, navigate, username, onLog
   const [askText, setAskText] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const load = async () => {
@@ -117,7 +118,7 @@ export default function Overview({ authenticatedFetch, navigate, username, onLog
       }
     };
     void load();
-  }, [authenticatedFetch]);
+  }, [authenticatedFetch, reloadKey]);
 
   const completion = metrics.total_tasks
     ? Math.round((metrics.completed_tasks / metrics.total_tasks) * 100)
@@ -184,9 +185,18 @@ export default function Overview({ authenticatedFetch, navigate, username, onLog
           </button>
         </form>
 
-        {error && <div className="operations-error">{error}</div>}
-
-        {loading ? (
+        {error ? (
+          <div className="overview-error-state" role="alert">
+            <CircleAlert size={22} />
+            <div>
+              <strong>Unable to load operations overview</strong>
+              <p>{error}</p>
+            </div>
+            <button type="button" onClick={() => setReloadKey((current) => current + 1)}>
+              Retry
+            </button>
+          </div>
+        ) : loading ? (
           <div className="operations-state">Loading operations overview…</div>
         ) : (
           <>

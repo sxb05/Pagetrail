@@ -8,7 +8,7 @@ from functools import lru_cache
 from sqlalchemy import Column, MetaData, String, Table, Text, insert, select
 from pgvector.sqlalchemy import Vector
 # from app.core.paths import UPLOAD_DIR
-from app.db.session import admin_engine, engine
+from app.db.session import admin_engine, engine, init_db
 from app.db.models import Conversation
 
 # UPLOAD_DIR.mkdir(exist_ok=True)
@@ -38,10 +38,8 @@ rag_documents = Table(
 )
 
 def init_rag_db() -> None:
-    """Create the RAG table during the explicit database migration step."""
-    with admin_engine.begin() as connection:
-        connection.exec_driver_sql("SET LOCAL statement_timeout = '30s'")
-        metadata.create_all(bind=connection)
+    """Backward-compatible explicit development wrapper for Alembic."""
+    init_db()
 
 
 def read_pdf(file_path: str) -> str:

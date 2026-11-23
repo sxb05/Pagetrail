@@ -2167,6 +2167,39 @@ button {
   opacity: 0.45;
 }
 
+.overview-error-state {
+  min-height: 180px;
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 18px;
+  border: 1px solid rgba(225,154,154,.28);
+  border-radius: 14px;
+  background: rgba(186,91,91,.10);
+  color: #e19a9a;
+}
+
+.overview-error-state strong {
+  color: #f7f4fb;
+}
+
+.overview-error-state p {
+  margin: 4px 0 0;
+  color: #b8b1a2;
+  font-size: 12px;
+}
+
+.overview-error-state button {
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: #f07836;
+  color: #111111;
+  font-weight: 700;
+}
+
 .overview-metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0,1fr));

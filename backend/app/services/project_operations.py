@@ -139,6 +139,34 @@ def create_organization(db: Session, user: User, name: str, slug: str | None) ->
     return organization
 
 
+def ensure_personal_organization(db: Session, user: User) -> Organization:
+    slug = f"personal-user-{user.id}"
+    organization = db.query(Organization).filter_by(slug=slug).first()
+    if organization is None:
+        organization = Organization(
+            name="Personal workspace",
+            slug=slug,
+            created_by=user.id,
+        )
+        db.add(organization)
+        db.flush()
+
+    membership = get_org_membership(db, organization.id, user.id)
+    if membership is None:
+        db.add(
+            OrganizationMember(
+                organization_id=organization.id,
+                user_id=user.id,
+                role=ProjectMemberRole.OWNER.value,
+            )
+        )
+        db.flush()
+    elif membership.role != ProjectMemberRole.OWNER.value:
+        membership.role = ProjectMemberRole.OWNER.value
+        db.flush()
+    return organization
+
+
 def update_organization(db: Session, organization: Organization, user: User, data: dict) -> Organization:
     require_org_manager(db, organization.id, user)
     if "name" in data and data["name"] is not None:

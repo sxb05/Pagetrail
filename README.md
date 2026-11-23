@@ -538,6 +538,7 @@ DATABASE_PASSWORD=<password>
 
 # Optional admin connection
 # DATABASE_ADMIN_URL=postgresql+psycopg://<admin>:<password>@<host>:5432/<database>
+ALEMBIC_DATABASE_URL=postgresql+psycopg://<migration-user>:<password>@<host>:5432/<database>
 
 # Google Gemini
 GEMINI_API_KEY=<gemini-api-key>
@@ -618,41 +619,40 @@ The application is available at `http://localhost:8000`.
 
 ## 13. Database Initialization
 
-Pagetrail keeps schema mutations outside the FastAPI startup lifecycle. Legacy
-initialization helpers remain available during the migration transition. See
-`MIGRATIONS.md` for the baseline, development, production procedure, and
-backward-compatible behavior of `init_db()` and `init_rag_db()`.
+Pagetrail keeps schema mutations outside the FastAPI startup lifecycle.
+Alembic is the schema migration authority. For a local PostgreSQL development
+database, use the explicit backward-compatible initializer below. It requires
+`ALEMBIC_DATABASE_URL` and refuses remote database hosts. See `MIGRATIONS.md`
+for the baseline and production procedure.
 
 **Windows PowerShell:**
 
 ```powershell
 $env:PYTHONPATH="backend"
+$env:PAGETRAIL_ALLOW_LEGACY_INIT="true"
+$env:ALEMBIC_DATABASE_URL="postgresql+psycopg://<dev-user>:<password>@localhost:5432/<database>"
 python -m app.scripts.init_database
 ```
 
 **Linux / macOS:**
 
 ```bash
-PYTHONPATH=backend python -m app.scripts.init_database
+PYTHONPATH=backend PAGETRAIL_ALLOW_LEGACY_INIT=true \
+ALEMBIC_DATABASE_URL="postgresql+psycopg://<dev-user>:<password>@127.0.0.1:5432/<database>" \
+python -m app.scripts.init_database
 ```
 
 **Render Shell:**
 
 ```bash
-python -m app.scripts.init_database
+# Deprecated command. Do not run against Render/Supabase.
+# Use the controlled GitHub migration workflow instead.
 ```
 
-The legacy initializer still:
-
-1. Uses `DATABASE_ADMIN_URL` when configured, otherwise `DATABASE_URL`.
-2. Verifies the PostgreSQL vector extension.
-3. Creates the document retrieval table.
-4. Creates application tables.
-5. Applies additive RLS/column/index setup.
-
-It has been preserved for backward compatibility and is not invoked by FastAPI
-startup. Do not run it or Alembic against production until the baseline is
-verified and stamped only through the manual procedure in `MIGRATIONS.md`.
+The legacy command is preserved only as an explicit local-development wrapper.
+It invokes Alembic with `ALEMBIC_DATABASE_URL`; it never falls back to
+`DATABASE_URL` or `DATABASE_ADMIN_URL`, and it refuses remote hosts. Normal
+FastAPI startup and Render deployment never call it.
 
 ### Project Operations Database Foundation
 

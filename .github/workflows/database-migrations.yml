@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: production-migrations
+
     steps:
       - uses: actions/checkout@v4
 
@@ -43,7 +44,8 @@ jobs:
           PYTHONPATH: backend
           ALEMBIC_DATABASE_URL: ${{ secrets.ALEMBIC_DATABASE_URL }}
           EXPECTED_DATABASE_HOST: ${{ vars.EXPECTED_DATABASE_HOST }}
-        run: python backend/scripts/verify_migration_target.py
+        run: |
+          python backend/scripts/verify_migration_target.py
 
       - name: Apply project operations and workspace migrations
         env:

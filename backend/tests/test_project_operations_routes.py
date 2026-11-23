@@ -41,6 +41,17 @@ def test_project_operations_authorization_and_dependency_cycle():
         json={"username": "owner", "password": "password123"},
     )
     assert register.status_code == 201
+    personal_registration_login = client.post(
+        "/api/auth/login",
+        data={"username": "owner", "password": "password123"},
+    )
+    personal_headers = {
+        "Authorization": f"Bearer {personal_registration_login.json()['access_token']}"
+    }
+    personal_orgs = client.get("/api/organizations", headers=personal_headers)
+    assert personal_orgs.status_code == 200
+    assert len(personal_orgs.json()) == 1
+    assert personal_orgs.json()[0]["slug"] == "personal-user-1"
     login = client.post(
         "/api/auth/login",
         data={"username": "owner", "password": "password123"},
